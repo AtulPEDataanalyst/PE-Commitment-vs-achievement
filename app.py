@@ -122,32 +122,34 @@ if st.session_state.verified:
         # Channel selector (outside form)
         channel = st.selectbox("Channel", CHANNELS)
 
-        # Dynamic fields
+        # Dynamic fields per channel
         if channel == "IMA":
             product = st.selectbox("Product", IMA_PRODUCTS)
             nop = st.number_input("NOP", min_value=0)
             amount = st.number_input("Amount (₹)", min_value=0)
             meetings = ""
+            deal_id = st.text_input("Deal ID")  # only for IMA
 
         elif channel == "IMA Cross Sales":
             product = st.selectbox("Product", OTHER_PRODUCTS)
             nop = 0
             amount = st.number_input("Amount (₹)", min_value=0)
             meetings = ""
+            deal_id = st.text_input("Deal ID")  # only for IMA Cross Sales
 
         elif channel == "Affiliate":
             product = st.selectbox("Product", OTHER_PRODUCTS)
             nop = 0
             amount = st.number_input("Amount (₹)", min_value=0)
             meetings = st.text_input("Today Meetings")
+            deal_id = ""  # no Deal ID for Affiliate
 
         else:  # Corporate
             product = st.selectbox("Product", OTHER_PRODUCTS)
             nop = 0
             amount = st.number_input("Amount (₹)", min_value=0)
             meetings = ""
-
-        deal_id = st.text_input("Deal ID")
+            deal_id = ""  # no Deal ID for Corporate
 
         # Submit only inside form
         with st.form("submit_form"):
