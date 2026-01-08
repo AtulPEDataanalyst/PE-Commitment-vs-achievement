@@ -2,7 +2,6 @@ import streamlit as st
 from datetime import date, datetime, time
 import pandas as pd
 from sheets import get_client, read_sheet, append_row
-import base64
 
 # ================= PAGE CONFIG =================
 st.set_page_config(page_title="Commitment vs Achievement", layout="wide")
@@ -17,12 +16,8 @@ st.markdown("""
     box-shadow: 0px 2px 10px rgba(0,0,0,0.08);
     margin-bottom: 18px;
 }
-.timer {
-    font-size:18px;
-    font-weight:700;
-    color:#c62828;
-}
 .stButton>button {
+    width:100%;
     background-color: #1976d2;
     color: white;
     font-weight: 600;
@@ -32,18 +27,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ================= HEADER IMAGE =================
-def header_banner(path, height="100px"):
-    with open(path, "rb") as f:
-        img = base64.b64encode(f.read()).decode()
-    st.markdown(
-        f"<div style='width:100%; overflow:hidden; margin-bottom:10px;'>"
-        f"<img src='data:image/png;base64,{img}' style='width:100%; height:{height}; object-fit:cover; border-radius:16px;'>"
-        f"</div>", unsafe_allow_html=True
-    )
-
-header_banner("assets/header.png", height="100px")
-st.markdown("## Commitment vs Achievement")
+# ================= HEADER =================
+st.markdown("## 📊 Commitment vs Achievement")
 st.caption("From commitment to measurable achievement")
 
 # ================= DATA LOAD =================
@@ -70,8 +55,7 @@ st.session_state.setdefault("verified", False)
 # ================= TIME LOGIC =================
 now = datetime.now()
 cutoff = datetime.combine(date.today(), time(11, 30))
-time_left = cutoff - now
-form_allowed = time_left.total_seconds() > 0
+form_allowed = now < cutoff
 
 # ================= LAYOUT =================
 left, right = st.columns([1.5, 1])
@@ -124,20 +108,25 @@ if st.session_state.verified:
         m_commit = calc(emp_commit, mtd_start, today, 'expected_premium')
         m_ach = calc(emp_ach, mtd_start, today, 'actual_premium')
 
-        col1, col2, col3 = st.columns(3)
+        c1, c2, c3 = st.columns(3)
 
-        for col, title, c, a in [
-            (col1, "📅 Yesterday", y_commit, y_ach),
-            (col2, "📆 Weekly", w_commit, w_ach),
-            (col3, "📊 MTD", m_commit, m_ach)
-        ]:
-            with col:
-                pct = f"{(a/c*100):.0f}%" if c else "0%"
-                st.markdown(f"### {title}")
-                st.write(f"**Commitment:** ₹{c:,.0f}")
-                st.write(f"**Achievement:** ₹{a:,.0f}")
-                st.write(f"**Pending:** ₹{max(c-a,0):,.0f}")
-                st.write(f"**% Achieved:** {pct}")
+        with c1:
+            st.markdown("### 📅 Yesterday")
+            st.write(f"Commitment: ₹{y_commit:,.0f}")
+            st.write(f"Achievement: ₹{y_ach:,.0f}")
+            st.write(f"% Achieved: {round((y_ach/y_commit)*100,0) if y_commit else 0}%")
+
+        with c2:
+            st.markdown("### 📆 Weekly")
+            st.write(f"Commitment: ₹{w_commit:,.0f}")
+            st.write(f"Achievement: ₹{w_ach:,.0f}")
+            st.write(f"% Achieved: {round((w_ach/w_commit)*100,0) if w_commit else 0}%")
+
+        with c3:
+            st.markdown("### 📊 MTD")
+            st.write(f"Commitment: ₹{m_commit:,.0f}")
+            st.write(f"Achievement: ₹{m_ach:,.0f}")
+            st.write(f"% Achieved: {round((m_ach/m_commit)*100,0) if m_commit else 0}%")
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -151,30 +140,33 @@ if st.session_state.verified:
 
         st.subheader("📋 Daily Commitment Entry")
 
-        channel = st.selectbox(
-            "Channel",
-            ["IMA", "Cross Sale", "Affiliate", "Corporate"]
-        )
+        channel = st.selectbox("Channel", ["IMA", "Cross Sell", "Affiliate", "Corporate"])
 
         # ---------- IMA ----------
         if channel == "IMA":
             product = st.selectbox("Product", ["PI", "HI", "Umbrella"])
-
-            # ✅ ADDED FIELDS
             client_name = st.text_input("Client Name")
             commitment_nop = st.number_input("Commitment NOP Count", min_value=0, step=1)
 
             deals_commitment = st.text_input("Deals Commitment")
-            deals_created_product = st.text_input("Deals Created Product")
-            deal_assigned_to = st.text_input("Deal Assigned To (Cross Sale)")
+
+            deals_created_product = st.selectbox(
+                "Deals Created Product",
+                ["Health", "Life", "Fire", "Motor", "Misc"]
+            )
+
+            deal_assigned_to = st.selectbox(
+                "Deal Assigned To (IMA)",
+                ["Satish", "Divya", "Manisha", "Priti", "Ravi Raj"]
+            )
 
             expected_premium = 0
-            followups = 0
+            followups = ""
             closure_date = date.today()
             sub_product = ""
 
-        # ---------- CROSS SALE ----------
-        elif channel == "Cross Sale":
+        # ---------- CROSS SELL ----------
+        elif channel == "Cross Sell":
             product = st.selectbox("Product", ["Health", "Life", "Motor", "Fire", "Misc"])
             sub_product = ""
 
@@ -204,8 +196,17 @@ if st.session_state.verified:
                 sub_product = st.selectbox("Vehicle Type", ["2W", "4W", "CV"])
 
             partner = st.text_input("Partner Name")
-            meeting_place = st.text_input("Meeting Place")
-            followups = st.number_input("Follow-up Count", min_value=0)
+
+            followups = st.selectbox(
+                "Follow-up Count",
+                ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th or more"]
+            )
+
+            meeting_place = st.selectbox(
+                "Meeting Place",
+                ["Self Business", "Partner Client", "With Partner"]
+            )
+
             closure_date = st.date_input("Expected Closure Date")
 
             client_name = ""
@@ -215,7 +216,6 @@ if st.session_state.verified:
         # ---------- CORPORATE ----------
         else:
             client_name = st.text_input("Client Name")
-            mobile = st.text_input("Client Mobile Number")
             product_type = st.selectbox("Product Type", ["EB", "Retail"])
             product = st.selectbox(
                 "Product",
@@ -224,7 +224,8 @@ if st.session_state.verified:
             expected_premium = st.number_input("Expected Premium", min_value=0)
             case_type = st.selectbox("Case Type", ["Fresh", "Renewal"])
             closure_date = st.date_input("Expected Closure Date")
-            followups = 0
+
+            followups = ""
             sub_product = ""
             commitment_nop = 0
 
@@ -258,7 +259,10 @@ if st.session_state.verified:
 # ================= RIGHT PANEL =================
 with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("📌 Performance Snapshot")
-    st.image("assets/achievement.png", width=380)
-    st.image("assets/commitment.png", width=380)
+    st.subheader("📌 Notes")
+    st.markdown("""
+    • Commitment entry allowed till **11:30 AM**  
+    • Achievement auto-fetched from SIBRO  
+    • Contact admin for corrections  
+    """)
     st.markdown("</div>", unsafe_allow_html=True)
