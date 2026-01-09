@@ -293,8 +293,9 @@ with right:
     st.subheader("📌 Notes")
     st.markdown("""
     • Commitment allowed till **11:30 AM**  
-    • Achievement auto-fetched  
+    • Achievement data will be calculated by fetching yesterday’s SIBRO entries up to **9:00 PM**
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
+
 
