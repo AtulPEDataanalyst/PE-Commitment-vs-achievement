@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
 import pandas as pd
 from sheets import get_client, read_sheet, append_row
 
@@ -55,10 +56,16 @@ for df in [commitments, achievements]:
 st.session_state.setdefault("verified", False)
 
 # ================= TIME LOGIC =================
-now = datetime.now()
-cutoff = datetime.combine(date.today(), time(11, 30))
-form_allowed = now < cutoff
+ist = ZoneInfo("Asia/Kolkata")
 
+now = datetime.now(ist)
+cutoff = datetime.combine(
+    date.today(),
+    time(11, 30),
+    tzinfo=ist
+)
+
+form_allowed = now < cutoff
 # ================= LAYOUT =================
 left, right = st.columns([1.5, 1])
 
@@ -290,3 +297,4 @@ with right:
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
+
