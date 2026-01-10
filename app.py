@@ -43,10 +43,12 @@ sh = gc.open("Sales_Commitment_Tracker")
 users = read_sheet(sh, "user_master")
 commitments = read_sheet(sh, "daily_commitments")
 achievements = read_sheet(sh, "daily_achievement")
+lead_team_map = read_sheet(sh, "lead_team_map")
 
 users.columns = users.columns.str.lower()
 commitments.columns = commitments.columns.str.lower()
 achievements.columns = achievements.columns.str.lower()
+lead_team_map.columns = lead_team_map.columns.str.lower()
 
 for df in [commitments, achievements]:
     if 'date' in df.columns:
@@ -64,8 +66,8 @@ cutoff = datetime.combine(
     time(11, 30),
     tzinfo=ist
 )
-
 form_allowed = now < cutoff
+
 # ================= LAYOUT =================
 left, right = st.columns([1.5, 1])
 
@@ -83,6 +85,8 @@ with left:
             st.session_state.emp_code = emp_code
             st.session_state.emp_name = user.iloc[0]["empname"]
             st.session_state.team = user.iloc[0]["team"]
+            st.session_state.role = user.iloc[0]["role"]
+            st.session_state.channel = user.iloc[0]["channel"]
             st.success(f"Welcome {st.session_state.emp_name}")
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -90,10 +94,6 @@ with left:
 if st.session_state.verified:
     with left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("📊 Summary")
-
-        emp_commit = commitments[commitments["empcode"].astype(str) == st.session_state.emp_code]
-        emp_ach = achievements[achievements["empcode"].astype(str) == st.session_state.emp_code]
 
         today = date.today()
         yesterday = today - pd.Timedelta(days=1)
@@ -108,37 +108,107 @@ if st.session_state.verified:
                 errors='coerce'
             ).fillna(0).sum()
 
-        y_commit = calc(emp_commit, yesterday, yesterday, 'expected_premium')
-        y_ach = calc(emp_ach, yesterday, yesterday, 'actual_premium')
-        w_commit = calc(emp_commit, week_start, today, 'expected_premium')
-        w_ach = calc(emp_ach, week_start, today, 'actual_premium')
-        m_commit = calc(emp_commit, mtd_start, today, 'expected_premium')
-        m_ach = calc(emp_ach, mtd_start, today, 'actual_premium')
+        def show_dashboard(commit_df, ach_df, title):
+            y_commit = calc(commit_df, yesterday, yesterday, 'expected_premium')
+            y_ach = calc(ach_df, yesterday, yesterday, 'actual_premium')
+            w_commit = calc(commit_df, week_start, today, 'expected_premium')
+            w_ach = calc(ach_df, week_start, today, 'actual_premium')
+            m_commit = calc(commit_df, mtd_start, today, 'expected_premium')
+            m_ach = calc(ach_df, mtd_start, today, 'actual_premium')
 
-        c1, c2, c3 = st.columns(3)
+            st.subheader(title)
+            c1, c2, c3 = st.columns(3)
 
-        with c1:
-            st.markdown("### 📅 Yesterday")
-            st.write(f"Commitment: ₹{y_commit:,.0f}")
-            st.write(f"Achievement: ₹{y_ach:,.0f}")
-            st.write(f"% Achieved: {round((y_ach/y_commit)*100,0) if y_commit else 0}%")
+            with c1:
+                st.markdown("### 📅 Yesterday")
+                st.write(f"Commitment: ₹{y_commit:,.0f}")
+                st.write(f"Achievement: ₹{y_ach:,.0f}")
+                st.write(f"% Achieved: {round((y_ach/y_commit)*100,0) if y_commit else 0}%")
 
-        with c2:
-            st.markdown("### 📆 Weekly")
-            st.write(f"Commitment: ₹{w_commit:,.0f}")
-            st.write(f"Achievement: ₹{w_ach:,.0f}")
-            st.write(f"% Achieved: {round((w_ach/w_commit)*100,0) if w_commit else 0}%")
+            with c2:
+                st.markdown("### 📆 Weekly")
+                st.write(f"Commitment: ₹{w_commit:,.0f}")
+                st.write(f"Achievement: ₹{w_ach:,.0f}")
+                st.write(f"% Achieved: {round((w_ach/w_commit)*100,0) if w_commit else 0}%")
 
-        with c3:
-            st.markdown("### 📊 MTD")
-            st.write(f"Commitment: ₹{m_commit:,.0f}")
-            st.write(f"Achievement: ₹{m_ach:,.0f}")
-            st.write(f"% Achieved: {round((m_ach/m_commit)*100,0) if m_commit else 0}%")
+            with c3:
+                st.markdown("### 📊 MTD")
+                st.write(f"Commitment: ₹{m_commit:,.0f}")
+                st.write(f"Achievement: ₹{m_ach:,.0f}")
+                st.write(f"% Achieved: {round((m_ach/m_commit)*100,0) if m_commit else 0}%")
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        role = st.session_state.role
+        emp_code = st.session_state.emp_code
+
+        if role == "User":
+            c_df = commitments[commitments["empcode"].astype(str) == emp_code]
+            a_df = achievements[achievements["empcode"].astype(str) == emp_code]
+            show_dashboard(c_df, a_df, "👤 My Performance")
+
+        elif role == "Team Lead":
+            self_c = commitments[commitments["empcode"].astype(str) == emp_code]
+            self_a = achievements[achievements["empcode"].astype(str) == emp_code]
+            show_dashboard(self_c, self_a, "👤 My Performance")
+
+            teams = lead_team_map[lead_team_map["lead_empcode"].astype(str) == emp_code]["team"].unique()
+            for t in teams:
+                team_users = users[users["team"] == t]
+                team_codes = team_users["empcode"].astype(str)
+
+                t_c = commitments[commitments["empcode"].astype(str).isin(team_codes)]
+                t_a = achievements[achievements["empcode"].astype(str).isin(team_codes)]
+                show_dashboard(t_c, t_a, f"👥 Team – {t}")
+
+                user_map = dict(zip(team_users["empcode"].astype(str), team_users["empname"]))
+                sel = st.selectbox(
+                    f"View User ({t})",
+                    list(user_map.keys()),
+                    format_func=lambda x: f"{x} - {user_map[x]}",
+                    key=f"user_{t}"
+                )
+
+                uc = commitments[commitments["empcode"].astype(str) == sel]
+                ua = achievements[achievements["empcode"].astype(str) == sel]
+                show_dashboard(uc, ua, f"👤 {sel} - {user_map[sel]}")
+
+        else:  # Management
+            st.subheader("🏢 Overall Performance")
+
+            # -------- CHANNEL SELECTION --------
+            channels = users['channel'].unique().tolist()
+            selected_channel = st.selectbox("Select Channel", ["All Channels"] + channels, index=0)
+
+            if selected_channel == "All Channels":
+                c_df = commitments
+                a_df = achievements
+                title = "🏢 Overall Performance – All Channels"
+            else:
+                c_df = commitments[commitments["channel"] == selected_channel]
+                a_df = achievements[achievements["channel"] == selected_channel]
+                title = f"🏢 Channel – {selected_channel}"
+
+            show_dashboard(c_df, a_df, title)
+
+            # -------- USER SELECTION --------
+            if selected_channel != "All Channels":
+                users_in_channel = users[users["channel"] == selected_channel]
+                user_map = dict(zip(users_in_channel["empcode"].astype(str), users_in_channel["empname"]))
+                if user_map:
+                    selected_user = st.selectbox(
+                        f"Select User ({selected_channel})",
+                        list(user_map.keys()),
+                        format_func=lambda x: f"{x} - {user_map[x]}",
+                        key=f"user_mgmt_{selected_channel}"
+                    )
+
+                    uc = commitments[commitments["empcode"].astype(str) == selected_user]
+                    ua = achievements[achievements["empcode"].astype(str) == selected_user]
+                    show_dashboard(uc, ua, f"👤 {selected_user} - {user_map[selected_user]}")
+
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # ================= COMMITMENT FORM =================
-if st.session_state.verified:
+if st.session_state.verified and st.session_state.role != "Management":
     with left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -147,109 +217,89 @@ if st.session_state.verified:
 
         st.subheader("📋 Daily Commitment Entry")
 
-        channel = st.selectbox(
-            "Channel",
-            ["Association", "Cross Sell", "Affiliate", "Corporate"]
-        )
+        channel = st.session_state.channel
+        st.info(f"Channel : {channel}")
 
         # ---------- ASSOCIATION ----------
         if channel == "Association":
-            association = st.selectbox(
-                "Association",
-                ["IMA", "IAP", "RMA", "MSBIRIA", "ISCP", "NON-IMA"]
-            )
-
-            product = st.selectbox("Product", ["PI", "HI", "Umbrella", "Other Products"])
+            association = st.selectbox("Association", ["IMA","IAP","RMA","MSBIRIA","ISCP","NON-IMA"])
+            product = st.selectbox("Product", ["PI","HI","Umbrella","Other Products"])
             deal_id = st.text_input("Deal ID")
             client_name = st.text_input("Client Name")
             commitment_nop = st.number_input("Commitment NOP", min_value=0)
             deals_commitment = st.text_input("Deals Commitment")
-            deals_created_product = st.selectbox(
-                "Deals Created Product", ["Health", "Life", "Fire", "Motor", "Misc"]
-            )
-            deal_assigned_to = st.selectbox(
-                "Deal Assigned To", ["Satish", "Divya", "Manisha", "Priti", "Ravi Raj"]
-            )           
-            followups = st.selectbox("Follow-up Count",
-                ["1st","2nd","3rd","4th","5th","6th","7th or more"])
-            closure_date = st.date_input("Expected Closure Date", format="DD/MM/YYYY")
-            sub_product = ""
-            case_type = ""
-            product_type = ""
-            client_mobile = ""
+            deals_created_product = st.selectbox("Deals Created Product", ["Health","Life","Fire","Motor","Misc"])
+            deal_assigned_to = st.text_input("Deal Assigned To")
+            followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
+            closure_date = st.date_input("Expected Closure Date")
+            expected_premium = 0
+            sub_product = case_type = product_type = client_mobile = ""
 
         # ---------- CROSS SELL ----------
         elif channel == "Cross Sell":
             association = ""
             product = st.selectbox("Product", ["Health","Life","Motor","Fire","Misc"])
-            sub_product = ""
             if product == "Health":
-                sub_product = st.selectbox("Type", ["Port","Fresh"])
+                sub_product = st.selectbox("Sub Product", ["Health Basic", "Health Plus", "Health Premium"])
             elif product == "Life":
-                sub_product = st.selectbox("Category", ["Term","Investment","Traditional"])
+                sub_product = st.selectbox("Sub Product", ["Term Life", "Whole Life", "Endowment"])
             elif product == "Motor":
-                sub_product = st.selectbox("Vehicle Type", ["2W","4W","CV"])
-
+                sub_product = st.selectbox("Sub Product", ["Car", "Bike", "Commercial Vehicle"])
+            else:
+                sub_product = st.text_input("Sub Product")
             client_name = st.text_input("Client Name")
             expected_premium = st.number_input("Expected Premium", min_value=0)
-            followups = st.selectbox("Follow-up Count",
-                ["1st","2nd","3rd","4th","5th","6th","7th or more"])
-            closure_date = st.date_input("Expected Closure Date", format="DD/MM/YYYY")
+            followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
+            closure_date = st.date_input("Expected Closure Date")
             commitment_nop = 0
-            deal_id = st.text_input("Deal ID")
-            deals_commitment = deals_created_product = deal_assigned_to = ""
+            deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
             case_type = product_type = client_mobile = ""
 
         # ---------- AFFILIATE ----------
         elif channel == "Affiliate":
             association = ""
             product = st.selectbox("Product", ["Health","Life","Motor","Fire","Misc"])
-            sub_product = ""
             if product == "Health":
-                sub_product = st.selectbox("Type", ["Port","Fresh"])
+                sub_product = st.selectbox("Sub Product", ["Health Basic", "Health Plus", "Health Premium"])
             elif product == "Life":
-                sub_product = st.selectbox("Category", ["Term","Investment","Traditional"])
+                sub_product = st.selectbox("Sub Product", ["Term Life", "Whole Life", "Endowment"])
             elif product == "Motor":
-                sub_product = st.selectbox("Vehicle Type", ["2W","4W","CV"])
-
-            partner_name = st.text_input("Partner Name")
-            followups = st.selectbox("Follow-up Count",
-                ["1st","2nd","3rd","4th","5th","6th","7th or more"])
-            Meeting_Type = st.selectbox("Meeting Type",
-                ["Self Business","Partner Client","Visit Partner"])
-            expected_premium = st.number_input("Expected Premium",min_value=0)
+                sub_product = st.selectbox("Sub Product", ["Car", "Bike", "Commercial Vehicle"])
+            else:
+                sub_product = st.text_input("Sub Product")
+            expected_premium = st.number_input("Expected Premium", min_value=0)
+            followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
+            closure_date = st.date_input("Expected Closure Date")
             client_name = ""
-            closure_date = st.date_input("Expected Closure Date", format="DD/MM/YYYY")
             commitment_nop = 0
             deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
             case_type = product_type = client_mobile = ""
 
-        # ---------- CORPORATE ----------
+        # ---------- CORPORATE / OTHER ----------
         else:
             association = ""
             client_name = st.text_input("Client Name")
-            client_mobile = st.text_input("Client Mobile No")
+            client_mobile = st.text_input("Client Mobile")
             case_type = st.selectbox("Case Type", ["Fresh","Renewal"])
             product_type = st.selectbox("Product Type", ["EB","Non EB","Retail"])
-
             if product_type == "EB":
-                product = st.selectbox("Product", ["GMC","GPA","GTL"])
+                sub_product = st.selectbox("Sub Product", ["EB Health", "EB Life", "EB Motor"])
             elif product_type == "Non EB":
-                product = st.selectbox("Product", ["Life","Liability","Misc","Fire","DON"])
+                sub_product = st.selectbox("Sub Product", ["Non EB Health", "Non EB Life", "Non EB Motor"])
+            elif product_type == "Retail":
+                sub_product = st.selectbox("Sub Product", ["Retail Health", "Retail Life", "Retail Motor"])
             else:
-                product = st.selectbox("Product", ["health","motor","Life",])
-
+                sub_product = st.text_input("Sub Product")
+            product = st.text_input("Product")
             expected_premium = st.number_input("Expected Premium", min_value=0)
-            closure_date = st.date_input("Expected Closure Date", format="DD/MM/YYYY")
-            followups = st.selectbox("Follow-up Count",
-                ["1st","2nd","3rd","4th","5th","6th","7th or more"])
-            sub_product =""
+            followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
+            closure_date = st.date_input("Expected Closure Date")
             commitment_nop = 0
             deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
 
+        # ---------- SUBMIT FORM ----------
         with st.form("submit_form"):
             submit = st.form_submit_button("🚀 Submit Commitment", disabled=not form_allowed)
-
             if submit:
                 append_row(
                     sh,
@@ -279,11 +329,6 @@ if st.session_state.verified:
                     ]
                 )
                 st.success("✅ Commitment submitted successfully")
-                submit_time = datetime.now()
-                st.success(
-                    f"✅ Commitment submitted successfully at "
-                    f"{submit_time.strftime('%d/%m/%Y %I:%M %p')}"
-                )
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -293,9 +338,7 @@ with right:
     st.subheader("📌 Notes")
     st.markdown("""
     • Commitment allowed till **11:30 AM**  
-    • Achievement data will be calculated by fetching yesterday’s SIBRO entries up to **9:00 PM**
+    • Achievement auto-fetched  
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
-
-
