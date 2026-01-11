@@ -229,7 +229,7 @@ if st.session_state.verified and st.session_state.role != "Management":
             commitment_nop = st.number_input("Commitment NOP", min_value=0)
             deals_commitment = st.text_input("Deals Commitment")
             deals_created_product = st.selectbox("Deals Created Product", ["Health","Life","Fire","Motor","Misc"])
-            deal_assigned_to = st.text_input("Deal Assigned To")
+            deal_assigned_to = st.selectbox("Deal Assigned To",["Satish","Divya","Ravi Raj","Rasika","Manisha"])
             followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
             closure_date = st.date_input("Expected Closure Date")
             expected_premium = 0
@@ -240,19 +240,20 @@ if st.session_state.verified and st.session_state.role != "Management":
             association = ""
             product = st.selectbox("Product", ["Health","Life","Motor","Fire","Misc"])
             if product == "Health":
-                sub_product = st.selectbox("Sub Product", ["Health Basic", "Health Plus", "Health Premium"])
+                sub_product = st.selectbox("Sub Product", ["Port","New"])
             elif product == "Life":
-                sub_product = st.selectbox("Sub Product", ["Term Life", "Whole Life", "Endowment"])
+                sub_product = st.selectbox("Sub Product", ["Term", "Investment", "Traditional"])
             elif product == "Motor":
                 sub_product = st.selectbox("Sub Product", ["Car", "Bike", "Commercial Vehicle"])
             else:
                 sub_product = st.text_input("Sub Product")
             client_name = st.text_input("Client Name")
+            deal_id = st.text_input("Deal ID")
             expected_premium = st.number_input("Expected Premium", min_value=0)
             followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
             closure_date = st.date_input("Expected Closure Date")
             commitment_nop = 0
-            deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
+            deals_commitment = deals_created_product = deal_assigned_to = ""
             case_type = product_type = client_mobile = ""
 
         # ---------- AFFILIATE ----------
@@ -260,9 +261,9 @@ if st.session_state.verified and st.session_state.role != "Management":
             association = ""
             product = st.selectbox("Product", ["Health","Life","Motor","Fire","Misc"])
             if product == "Health":
-                sub_product = st.selectbox("Sub Product", ["Health Basic", "Health Plus", "Health Premium"])
+                sub_product = st.selectbox("Sub Product", ["Port","New"])
             elif product == "Life":
-                sub_product = st.selectbox("Sub Product", ["Term Life", "Whole Life", "Endowment"])
+                sub_product = st.selectbox("Sub Product", ["Term", "Investment", "Traditional"])
             elif product == "Motor":
                 sub_product = st.selectbox("Sub Product", ["Car", "Bike", "Commercial Vehicle"])
             else:
@@ -270,6 +271,7 @@ if st.session_state.verified and st.session_state.role != "Management":
             expected_premium = st.number_input("Expected Premium", min_value=0)
             followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
             closure_date = st.date_input("Expected Closure Date")
+            meeting_type = st.selectbox("Meeting Type", ["Visit Partner","Partner Client","Self Business"])
             client_name = ""
             commitment_nop = 0
             deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
@@ -283,9 +285,9 @@ if st.session_state.verified and st.session_state.role != "Management":
             case_type = st.selectbox("Case Type", ["Fresh","Renewal"])
             product_type = st.selectbox("Product Type", ["EB","Non EB","Retail"])
             if product_type == "EB":
-                sub_product = st.selectbox("Sub Product", ["EB Health", "EB Life", "EB Motor"])
+                sub_product = st.selectbox("Sub Product", ["GPA", "GTL","GMC"])
             elif product_type == "Non EB":
-                sub_product = st.selectbox("Sub Product", ["Non EB Health", "Non EB Life", "Non EB Motor"])
+                sub_product = st.selectbox("Sub Product", ["Liability", "Misc", "DNO","Fire","WC"])
             elif product_type == "Retail":
                 sub_product = st.selectbox("Sub Product", ["Retail Health", "Retail Life", "Retail Motor"])
             else:
@@ -294,6 +296,7 @@ if st.session_state.verified and st.session_state.role != "Management":
             expected_premium = st.number_input("Expected Premium", min_value=0)
             followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
             closure_date = st.date_input("Expected Closure Date")
+            meeting_type = st.selectbox("Meeting Type", ["With team","Individual"])
             commitment_nop = 0
             deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
 
@@ -324,6 +327,7 @@ if st.session_state.verified and st.session_state.role != "Management":
                         deal_assigned_to,
                         case_type,
                         product_type,
+                        meeting_type,
                         client_mobile,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     ]
@@ -342,3 +346,4 @@ with right:
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
+
