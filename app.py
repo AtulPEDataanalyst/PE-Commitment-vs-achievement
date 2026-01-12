@@ -301,9 +301,12 @@ if st.session_state.verified and st.session_state.role != "Management":
             deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
 
         # ---------- SUBMIT FORM ----------
+                # ---------- SUBMIT FORM ----------
         with st.form("submit_form"):
             submit = st.form_submit_button("🚀 Submit Commitment", disabled=not form_allowed)
             if submit:
+                submit_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
+
                 append_row(
                     sh,
                     "daily_commitments",
@@ -329,13 +332,14 @@ if st.session_state.verified and st.session_state.role != "Management":
                         product_type,
                         meeting_type,
                         client_mobile,
-                        datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        submit_time
                     ]
                 )
+
                 st.success("✅ Commitment submitted successfully")
+                st.info(f"🕒 Submitted at: **{submit_time}**")
 
         st.markdown("</div>", unsafe_allow_html=True)
-
 # ================= RIGHT PANEL =================
 with right:
     st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -346,5 +350,6 @@ with right:
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
+
 
 
