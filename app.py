@@ -233,7 +233,7 @@ if st.session_state.verified and st.session_state.role != "Management":
             followups = st.selectbox("Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"])
             closure_date = st.date_input("Expected Closure Date")
             expected_premium = 0
-            sub_product = case_type = product_type = client_mobile = ""
+            sub_product = case_type = product_type = client_mobile = meeting_type =""
 
         # ---------- CROSS SELL ----------
         elif channel == "Cross Sell":
@@ -254,7 +254,7 @@ if st.session_state.verified and st.session_state.role != "Management":
             closure_date = st.date_input("Expected Closure Date")
             commitment_nop = 0
             deals_commitment = deals_created_product = deal_assigned_to = ""
-            case_type = product_type = client_mobile = ""
+            case_type = product_type = client_mobile = meeting_type = ""
 
         # ---------- AFFILIATE ----------
         elif channel == "Affiliate":
@@ -346,4 +346,5 @@ with right:
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
+
 
