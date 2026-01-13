@@ -24,6 +24,8 @@ body {
     background: linear-gradient(135deg, #f0f4ff, #d9e4ff);
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
+
+/* ---------- MAIN CARD ---------- */
 .card {
     background: rgba(255,255,255,0.95);
     padding: 20px;
@@ -32,6 +34,8 @@ body {
     margin-bottom: 18px;
     word-wrap: break-word;
 }
+
+/* ---------- BUTTON ---------- */
 .stButton>button {
     width: 100%;
     background: linear-gradient(90deg, #1976d2, #63a4ff);
@@ -41,18 +45,62 @@ body {
     padding: 12px;
 }
 
+/* ---------- KPI DASHBOARD CARDS ---------- */
+.kpi-card {
+    background: white;
+    border-radius: 14px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    margin-bottom: 12px;
+}
+
+.kpi-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #555;
+}
+
+.kpi-value {
+    font-size: 26px;
+    font-weight: 700;
+    margin: 6px 0;
+    color: #1a237e;
+}
+
+.kpi-sub {
+    font-size: 13px;
+    color: #777;
+}
+
+/* ---------- SECTION HEADINGS ---------- */
+.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 14px 0 10px;
+    color: #1a237e;
+}
+
 /* ---------- MOBILE / TABLET RESPONSIVE ---------- */
 @media only screen and (max-width: 768px) {
+
     .card {
         padding: 12px;
         margin-bottom: 12px;
     }
+
     .stButton>button {
         font-size: 14px;
         padding: 10px;
     }
-    .css-1d391kg {  /* Streamlit columns wrapper */
+
+    /* Force Streamlit columns to stack */
+    .css-1d391kg {
         flex-direction: column !important;
+    }
+
+    .kpi-value {
+        font-size: 22px;
     }
 }
 </style>
@@ -181,133 +229,190 @@ if st.session_state.verified:
         week_start = today - pd.Timedelta(days=today.weekday())
         mtd_start = today.replace(day=1)
 
-        # ---------- HELPER FUNCTIONS ----------
-        def calc(df, start, end, col):
-            if df.empty or col not in df.columns:
+        # ================= METRIC CONFIG =================
+        def get_metric_config(channel):
+            if channel == "Association":
+                return {
+                    "metric": "NOP",
+                    "commit_col": "nop",
+                    "ach_col": "actual_nop",
+                    "symbol": ""
+                }
+            else:
+                return {
+                    "metric": "PREMIUM",
+                    "commit_col": "expected_premium",
+                    "ach_col": "actual_premium",
+                    "symbol": "₹"
+                }
+
+        def calc_metric(df, start, end, col):
+            if df.empty or col not in df.columns or "date" not in df.columns:
                 return 0
             return pd.to_numeric(
-                df[(df['date'].dt.date >= start) & (df['date'].dt.date <= end)][col],
-                errors='coerce'
+                df[
+                    (df["date"].dt.date >= start) &
+                    (df["date"].dt.date <= end)
+                ][col],
+                errors="coerce"
             ).fillna(0).sum()
 
-        def calculate_today_commitment_value(commit_df, channel):
-            if commit_df.empty or 'date' not in commit_df.columns:
+        def calculate_today_metric(df, channel):
+            cfg = get_metric_config(channel)
+            if df.empty or "date" not in df.columns:
                 return 0
+            return pd.to_numeric(
+                df[df["date"].dt.date == today].get(cfg["commit_col"], 0),
+                errors="coerce"
+            ).fillna(0).sum()
 
-            today_df = commit_df[commit_df['date'].dt.date == date.today()]
+        # ================= KPI UI =================
+        def kpi_card(title, value, sub):
+            st.markdown(f"""
+            <div class="kpi-card">
+                <div class="kpi-title">{title}</div>
+                <div class="kpi-value">{value}</div>
+                <div class="kpi-sub">{sub}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            if channel == "Association":
-                col = today_df["commitment_nop"] if "commitment_nop" in today_df.columns else pd.Series([0])
-                return pd.to_numeric(col, errors="coerce").fillna(0).sum()
-            else:
-                col = today_df["expected_premium"] if "expected_premium" in today_df.columns else pd.Series([0])
-                return pd.to_numeric(col, errors="coerce").fillna(0).sum()
+        def show_dashboard(commit_df, ach_df, title, channel):
+            cfg = get_metric_config(channel)
+            symbol = cfg["symbol"]
+            metric = cfg["metric"]
 
+            y_c = calc_metric(commit_df, yesterday, yesterday, cfg["commit_col"])
+            y_a = calc_metric(ach_df, yesterday, yesterday, cfg["ach_col"])
 
-        def show_dashboard(commit_df, ach_df, title):
-            y_commit = calc(commit_df, yesterday, yesterday, 'expected_premium')
-            y_ach = calc(ach_df, yesterday, yesterday, 'actual_premium')
-            w_commit = calc(commit_df, week_start, today, 'expected_premium')
-            w_ach = calc(ach_df, week_start, today, 'actual_premium')
-            m_commit = calc(commit_df, mtd_start, today, 'expected_premium')
-            m_ach = calc(ach_df, mtd_start, today, 'actual_premium')
-            t_commit = calculate_today_commitment_value(commit_df, st.session_state.channel)
+            w_c = calc_metric(commit_df, week_start, today, cfg["commit_col"])
+            w_a = calc_metric(ach_df, week_start, today, cfg["ach_col"])
 
-            st.subheader(title)
-            c0, c1, c2, c3 = st.columns(4)
+            m_c = calc_metric(commit_df, mtd_start, today, cfg["commit_col"])
+            m_a = calc_metric(ach_df, mtd_start, today, cfg["ach_col"])
 
-            with c0:
-                st.markdown("### 🟢 Today")
-                if st.session_state.channel == "Association":
-                    st.write(f"Commitment (NOP): {int(t_commit)}")
-                else:
-                    st.write(f"Commitment: ₹{t_commit:,.0f}")
+            t_c = calculate_today_metric(commit_df, channel)
+
+            st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns(4)
 
             with c1:
-                st.markdown("### 📅 Yesterday")
-                st.write(f"Commitment: ₹{y_commit:,.0f}")
-                st.write(f"Achievement: ₹{y_ach:,.0f}")
-                st.write(f"% Achieved: {round((y_ach/y_commit)*100,0) if y_commit else 0}%")
+                kpi_card("🟢 Today", f"{symbol}{int(t_c):,}", f"Commitment ({metric})")
 
             with c2:
-                st.markdown("### 📆 Weekly")
-                st.write(f"Commitment: ₹{w_commit:,.0f}")
-                st.write(f"Achievement: ₹{w_ach:,.0f}")
-                st.write(f"% Achieved: {round((w_ach/w_commit)*100,0) if w_commit else 0}%")
+                kpi_card(
+                    "📅 Yesterday",
+                    f"{symbol}{int(y_c):,}",
+                    f"Achieved: {symbol}{int(y_a):,} | {round((y_a/y_c)*100,0) if y_c else 0}%"
+                )
 
             with c3:
-                st.markdown("### 📊 MTD")
-                st.write(f"Commitment: ₹{m_commit:,.0f}")
-                st.write(f"Achievement: ₹{m_ach:,.0f}")
-                st.write(f"% Achieved: {round((m_ach/m_commit)*100,0) if m_commit else 0}%")
+                kpi_card(
+                    "📆 Weekly",
+                    f"{symbol}{int(w_c):,}",
+                    f"Achieved: {symbol}{int(w_a):,} | {round((w_a/w_c)*100,0) if w_c else 0}%"
+                )
 
-        # ---------- DASHBOARD DISPLAY ----------
+            with c4:
+                kpi_card(
+                    "📊 MTD",
+                    f"{symbol}{int(m_c):,}",
+                    f"Achieved: {symbol}{int(m_a):,} | {round((m_a/m_c)*100,0) if m_c else 0}%"
+                )
+
+        # ================= ROLE BASED VIEW =================
         role = st.session_state.role
         emp_code = st.session_state.emp_code
 
+        # ---------- USER ----------
         if role == "User":
             c_df = commitments[commitments["empcode"].astype(str) == emp_code]
             a_df = achievements[achievements["empcode"].astype(str) == emp_code]
-            show_dashboard(c_df, a_df, "👤 My Performance")
+            show_dashboard(c_df, a_df, "👤 My Performance", st.session_state.channel)
 
+        # ---------- TEAM LEAD ----------
         elif role == "Team Lead":
             self_c = commitments[commitments["empcode"].astype(str) == emp_code]
             self_a = achievements[achievements["empcode"].astype(str) == emp_code]
-            show_dashboard(self_c, self_a, "👤 My Performance")
+            show_dashboard(self_c, self_a, "👤 My Performance", st.session_state.channel)
 
-            teams = lead_team_map[lead_team_map["lead_empcode"].astype(str) == emp_code]["team"].unique()
+            teams = lead_team_map[
+                lead_team_map["lead_empcode"].astype(str) == emp_code
+            ]["team"].unique()
+
             for t in teams:
                 team_users = users[users["team"] == t]
                 team_codes = team_users["empcode"].astype(str)
 
+                team_channel = team_users["channel"].mode()[0]
+
                 t_c = commitments[commitments["empcode"].astype(str).isin(team_codes)]
                 t_a = achievements[achievements["empcode"].astype(str).isin(team_codes)]
-                show_dashboard(t_c, t_a, f"👥 Team – {t}")
 
+                show_dashboard(t_c, t_a, f"👥 Team – {t}", team_channel)
+
+                # ✅ USER DRILL DOWN
                 user_map = dict(zip(team_users["empcode"].astype(str), team_users["empname"]))
-                sel = st.selectbox(
-                    f"View User ({t})",
+                sel_user = st.selectbox(
+                    f"Select User ({t})",
                     list(user_map.keys()),
                     format_func=lambda x: f"{x} - {user_map[x]}",
                     key=f"user_{t}"
                 )
 
-                uc = commitments[commitments["empcode"].astype(str) == sel]
-                ua = achievements[achievements["empcode"].astype(str) == sel]
-                show_dashboard(uc, ua, f"👤 {sel} - {user_map[sel]}")
+                uc = commitments[commitments["empcode"].astype(str) == sel_user]
+                ua = achievements[achievements["empcode"].astype(str) == sel_user]
 
-        else:  # Management
-            st.subheader("🏢 Overall Performance")
-            channels = users['channel'].unique().tolist()
-            selected_channel = st.selectbox("Select Channel", ["All Channels"] + channels, index=0)
+                show_dashboard(uc, ua, f"👤 {user_map[sel_user]}", team_channel)
+
+        # ---------- MANAGEMENT ----------
+        else:
+            st.markdown("<div class='section-title'>🏢 Overall Performance</div>", unsafe_allow_html=True)
+
+            channels = users["channel"].unique().tolist()
+            selected_channel = st.selectbox("Select Channel", ["All Channels"] + channels)
 
             if selected_channel == "All Channels":
-                c_df = commitments
-                a_df = achievements
-                title = "🏢 Overall Performance – All Channels"
+                show_dashboard(
+                    commitments[commitments["channel"] == "Association"],
+                    achievements[achievements["channel"] == "Association"],
+                    "📦 NOP Based (Association)",
+                    "Association"
+                )
+
+                show_dashboard(
+                    commitments[commitments["channel"] != "Association"],
+                    achievements[achievements["channel"] != "Association"],
+                    "💰 Premium Based",
+                    "Cross Sell"
+                )
+
             else:
                 c_df = commitments[commitments["channel"] == selected_channel]
                 a_df = achievements[achievements["channel"] == selected_channel]
-                title = f"🏢 Channel – {selected_channel}"
 
-            show_dashboard(c_df, a_df, title)
+                show_dashboard(c_df, a_df, f"🏢 Channel – {selected_channel}", selected_channel)
 
-            if selected_channel != "All Channels":
+                # ✅ USER DRILL DOWN
                 users_in_channel = users[users["channel"] == selected_channel]
-                user_map = dict(zip(users_in_channel["empcode"].astype(str), users_in_channel["empname"]))
+                user_map = dict(zip(
+                    users_in_channel["empcode"].astype(str),
+                    users_in_channel["empname"]
+                ))
+
                 if user_map:
-                    selected_user = st.selectbox(
+                    sel_user = st.selectbox(
                         f"Select User ({selected_channel})",
                         list(user_map.keys()),
-                        format_func=lambda x: f"{x} - {user_map[x]}",
-                        key=f"user_mgmt_{selected_channel}"
+                        format_func=lambda x: f"{x} - {user_map[x]}"
                     )
 
-                    uc = commitments[commitments["empcode"].astype(str) == selected_user]
-                    ua = achievements[achievements["empcode"].astype(str) == selected_user]
-                    show_dashboard(uc, ua, f"👤 {selected_user} - {user_map[selected_user]}")
+                    uc = commitments[commitments["empcode"].astype(str) == sel_user]
+                    ua = achievements[achievements["empcode"].astype(str) == sel_user]
+
+                    show_dashboard(uc, ua, f"👤 {user_map[sel_user]}", selected_channel)
 
         st.markdown("</div>", unsafe_allow_html=True)
+
 
 # ================= COMMITMENT FORM =================
 if st.session_state.verified and st.session_state.role != "Management":
@@ -637,4 +742,5 @@ with right:
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
+
 
