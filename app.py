@@ -145,7 +145,7 @@ ist = ZoneInfo("Asia/Kolkata")
 now = datetime.now(ist)
 cutoff = datetime.combine(
     date.today(),
-    dt_time(13, 30).replace(tzinfo=ist)  # <- use datetime.time here
+    dt_time(11, 30).replace(tzinfo=ist)  # <- use datetime.time here
 )    
 form_allowed = now < cutoff
 
@@ -637,3 +637,4 @@ with right:
     • Contact admin for correction  
     """)
     st.markdown("</div>", unsafe_allow_html=True)
+
