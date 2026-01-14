@@ -428,7 +428,7 @@ if st.session_state.verified and st.session_state.role != "Management":
         st.info(f"Channel : {channel}")
         emp_code = st.session_state.emp_code
 
-        # ---------- HELPER TO GET/SET SESSION VALUE ----------
+        # ---------- SESSION HELPERS ----------
         def get_sess_val(field, default=""):
             key = f"{emp_code}_{field}"
             return st.session_state.get(key, default)
@@ -437,21 +437,29 @@ if st.session_state.verified and st.session_state.role != "Management":
             key = f"{emp_code}_{field}"
             st.session_state[key] = value
 
+        def safe_selectbox(label, options, sess_key, default):
+            prev = get_sess_val(sess_key, default)
+            if prev not in options:
+                prev = default
+            value = st.selectbox(label, options, index=options.index(prev))
+            set_sess_val(sess_key, value)
+            return value
+
         # ---------- ASSOCIATION ----------
         if channel == "Association":
-            association = st.selectbox(
+            association = safe_selectbox(
                 "Association",
                 ["IMA","IAP","RMA","MSBIRIA","ISCP","NON-IMA"],
-                index=["IMA","IAP","RMA","MSBIRIA","ISCP","NON-IMA"].index(get_sess_val("association","IMA"))
+                "association",
+                "IMA"
             )
-            set_sess_val("association", association)
 
-            product = st.selectbox(
+            product = safe_selectbox(
                 "Product",
                 ["PI","HI","Umbrella","Other Products"],
-                index=["PI","HI","Umbrella","Other Products"].index(get_sess_val("product","PI"))
+                "product",
+                "PI"
             )
-            set_sess_val("product", product)
 
             deal_id = st.text_input("Deal ID", value=get_sess_val("deal_id"))
             set_sess_val("deal_id", deal_id)
@@ -467,28 +475,31 @@ if st.session_state.verified and st.session_state.role != "Management":
             deals_commitment = st.text_input("Deals Commitment", value=get_sess_val("deals_commitment"))
             set_sess_val("deals_commitment", deals_commitment)
 
-            deals_created_product = st.selectbox(
+            deals_created_product = safe_selectbox(
                 "Deals Created Product",
                 ["Health","Life","Fire","Motor","Misc"],
-                index=["Health","Life","Fire","Motor","Misc"].index(get_sess_val("deals_created_product","Health"))
+                "deals_created_product",
+                "Health"
             )
-            set_sess_val("deals_created_product", deals_created_product)
 
-            deal_assigned_to = st.selectbox(
+            deal_assigned_to = safe_selectbox(
                 "Deal Assigned To",
                 ["Satish","Divya","Ravi Raj","Rasika","Manisha"],
-                index=["Satish","Divya","Ravi Raj","Rasika","Manisha"].index(get_sess_val("deal_assigned_to","Satish"))
+                "deal_assigned_to",
+                "Satish"
             )
-            set_sess_val("deal_assigned_to", deal_assigned_to)
 
-            followups = st.selectbox(
+            followups = safe_selectbox(
                 "Follow-up Count",
                 ["1st","2nd","3rd","4th","5th","6th","7th or more"],
-                index=["1st","2nd","3rd","4th","5th","6th","7th or more"].index(get_sess_val("followups","1st"))
+                "followups",
+                "1st"
             )
-            set_sess_val("followups", followups)
 
-            closure_date = st.date_input("Expected Closure Date", value=get_sess_val("closure_date", date.today()))
+            closure_date = st.date_input(
+                "Expected Closure Date",
+                value=get_sess_val("closure_date", date.today())
+            )
             set_sess_val("closure_date", closure_date)
 
             expected_premium = 0
@@ -497,35 +508,31 @@ if st.session_state.verified and st.session_state.role != "Management":
         # ---------- CROSS SELL ----------
         elif channel == "Cross Sell":
             association = ""
-            product = st.selectbox(
+
+            product = safe_selectbox(
                 "Product",
                 ["Health","Life","Motor","Fire","Misc"],
-                index=["Health","Life","Motor","Fire","Misc"].index(get_sess_val("product","Health"))
+                "product",
+                "Health"
             )
-            set_sess_val("product", product)
 
-            # Sub-product logic
+            # 🔥 RESET SUB PRODUCT WHEN PRODUCT CHANGES
+            prev_product = get_sess_val("prev_product", product)
+            if prev_product != product:
+                set_sess_val("sub_product", "")
+            set_sess_val("prev_product", product)
+
             if product == "Health":
-                sub_product = st.selectbox(
-                    "Sub Product",
-                    ["Port","New"],
-                    index=["Port","New"].index(get_sess_val("sub_product","Port"))
-                )
+                sub_product = safe_selectbox("Sub Product", ["Port","New"], "sub_product", "Port")
             elif product == "Life":
-                sub_product = st.selectbox(
-                    "Sub Product",
-                    ["Term", "Investment", "Traditional"],
-                    index=["Term", "Investment", "Traditional"].index(get_sess_val("sub_product","Term"))
-                )
+                sub_product = safe_selectbox("Sub Product", ["Term","Investment","Traditional"], "sub_product", "Term")
             elif product == "Motor":
-                sub_product = st.selectbox(
-                    "Sub Product",
-                    ["Car", "Bike", "Commercial Vehicle"],
-                    index=["Car", "Bike", "Commercial Vehicle"].index(get_sess_val("sub_product","Car"))
-                )
+                sub_product = safe_selectbox("Sub Product", ["Car","Bike","Commercial Vehicle"], "sub_product", "Car")
+            elif product in ["Fire","Misc"]:
+                sub_product = safe_selectbox("Sub Product", ["New"], "sub_product", "New")
             else:
                 sub_product = st.text_input("Sub Product", value=get_sess_val("sub_product"))
-            set_sess_val("sub_product", sub_product)
+                set_sess_val("sub_product", sub_product)
 
             client_name = st.text_input("Client Name", value=get_sess_val("client_name"))
             set_sess_val("client_name", client_name)
@@ -538,12 +545,12 @@ if st.session_state.verified and st.session_state.role != "Management":
             )
             set_sess_val("expected_premium", expected_premium)
 
-            followups = st.selectbox(
+            followups = safe_selectbox(
                 "Follow-up Count",
                 ["1st","2nd","3rd","4th","5th","6th","7th or more"],
-                index=["1st","2nd","3rd","4th","5th","6th","7th or more"].index(get_sess_val("followups","1st"))
+                "followups",
+                "1st"
             )
-            set_sess_val("followups", followups)
 
             closure_date = st.date_input(
                 "Expected Closure Date",
@@ -557,48 +564,44 @@ if st.session_state.verified and st.session_state.role != "Management":
 
         # ---------- AFFILIATE ----------
         elif channel == "Affiliate":
-            # Similar to Cross Sell, just using session persistence
             association = ""
-            product = st.selectbox(
+
+            product = safe_selectbox(
                 "Product",
                 ["Health","Life","Motor","Fire","Misc"],
-                index=["Health","Life","Motor","Fire","Misc"].index(get_sess_val("product","Health"))
+                "product",
+                "Health"
             )
-            set_sess_val("product", product)
+
+            # 🔥 RESET SUB PRODUCT WHEN PRODUCT CHANGES
+            prev_product = get_sess_val("prev_product", product)
+            if prev_product != product:
+                set_sess_val("sub_product", "")
+            set_sess_val("prev_product", product)
 
             if product == "Health":
-                sub_product = st.selectbox(
-                    "Sub Product",
-                    ["Port","New"],
-                    index=["Port","New"].index(get_sess_val("sub_product","Port"))
-                )
+                sub_product = safe_selectbox("Sub Product", ["Port","New"], "sub_product", "Port")
             elif product == "Life":
-                sub_product = st.selectbox(
-                    "Sub Product",
-                    ["Term", "Investment", "Traditional"],
-                    index=["Term","Investment","Traditional"].index(get_sess_val("sub_product","Term"))
-                )
+                sub_product = safe_selectbox("Sub Product", ["Term","Investment","Traditional"], "sub_product", "Term")
             elif product == "Motor":
-                sub_product = st.selectbox(
-                    "Sub Product",
-                    ["Car","Bike","Commercial Vehicle"],
-                    index=["Car","Bike","Commercial Vehicle"].index(get_sess_val("sub_product","Car"))
-                )
+                sub_product = safe_selectbox("Sub Product", ["Car","Bike","Commercial Vehicle"], "sub_product", "Car")
+            elif product in ["Fire","Misc"]:
+                sub_product = safe_selectbox("Sub Product", ["New"], "sub_product", "New")
             else:
                 sub_product = st.text_input("Sub Product", value=get_sess_val("sub_product"))
-            set_sess_val("sub_product", sub_product)
+                set_sess_val("sub_product", sub_product)
 
             expected_premium = st.number_input(
                 "Expected Premium", min_value=0, value=int(get_sess_val("expected_premium",0))
             )
             set_sess_val("expected_premium", expected_premium)
 
-            followups = st.selectbox(
+            followups = safe_selectbox(
                 "Follow-up Count",
                 ["1st","2nd","3rd","4th","5th","6th","7th or more"],
-                index=["1st","2nd","3rd","4th","5th","6th","7th or more"].index(get_sess_val("followups","1st"))
+                "followups",
+                "1st"
             )
-            set_sess_val("followups", followups)
 
             closure_date = st.date_input(
                 "Expected Closure Date",
@@ -606,87 +609,22 @@ if st.session_state.verified and st.session_state.role != "Management":
             )
             set_sess_val("closure_date", closure_date)
 
-            meeting_type = st.selectbox(
-                "Meeting Type", ["Visit Partner","Partner Client","Self Business"],
-                index=["Visit Partner","Partner Client","Self Business"].index(get_sess_val("meeting_type","Visit Partner"))
+            meeting_type = safe_selectbox(
+                "Meeting Type",
+                ["Visit Partner","Partner Client","Self Business"],
+                "meeting_type",
+                "Visit Partner"
             )
-            set_sess_val("meeting_type", meeting_type)
 
             client_name = ""
             commitment_nop = 0
             deal_id = deals_commitment = deals_created_product = deal_assigned_to = ""
             case_type = product_type = client_mobile = ""
 
-        # ---------- CORPORATE / OTHER ----------
-        else:
-            association = ""
-            client_name = st.text_input("Client Name", value=get_sess_val("client_name"))
-            set_sess_val("client_name", client_name)
-
-            client_mobile = st.text_input("Client Mobile", value=get_sess_val("client_mobile"))
-            set_sess_val("client_mobile", client_mobile)
-
-            case_type = st.selectbox(
-                "Case Type", ["Fresh","Renewal"],
-                index=["Fresh","Renewal"].index(get_sess_val("case_type","Fresh"))
-            )
-            set_sess_val("case_type", case_type)
-
-            product_type = st.selectbox(
-                "Product Type", ["EB","Non EB","Retail"],
-                index=["EB","Non EB","Retail"].index(get_sess_val("product_type","EB"))
-            )
-            set_sess_val("product_type", product_type)
-
-            # Sub-product logic
-            if product_type == "EB":
-                sub_product = st.selectbox(
-                    "Sub Product", ["GPA","GTL","GMC"],
-                    index=["GPA","GTL","GMC"].index(get_sess_val("sub_product","GPA"))
-                )
-            elif product_type == "Non EB":
-                sub_product = st.selectbox(
-                    "Sub Product", ["Liability", "Misc", "DNO","Fire","WC"],
-                    index=["Liability","Misc","DNO","Fire","WC"].index(get_sess_val("sub_product","Liability"))
-                )
-            elif product_type == "Retail":
-                sub_product = st.selectbox(
-                    "Sub Product", ["Retail Health","Retail Life","Retail Motor"],
-                    index=["Retail Health","Retail Life","Retail Motor"].index(get_sess_val("sub_product","Retail Health"))
-                )
-            else:
-                sub_product = st.text_input("Sub Product", value=get_sess_val("sub_product"))
-            set_sess_val("sub_product", sub_product)
-
-            expected_premium = st.number_input(
-                "Expected Premium", min_value=0, value=int(get_sess_val("expected_premium",0))
-            )
-            set_sess_val("expected_premium", expected_premium)
-
-            followups = st.selectbox(
-                "Follow-up Count", ["1st","2nd","3rd","4th","5th","6th","7th or more"],
-                index=["1st","2nd","3rd","4th","5th","6th","7th or more"].index(get_sess_val("followups","1st"))
-            )
-            set_sess_val("followups", followups)
-
-            closure_date = st.date_input(
-                "Expected Closure Date",
-                value=get_sess_val("closure_date", date.today())
-            )
-            set_sess_val("closure_date", closure_date)
-
-            meeting_type = st.selectbox(
-                "Meeting Type", ["With team","Individual"],
-                index=["With team","Individual"].index(get_sess_val("meeting_type","With team"))
-            )
-            set_sess_val("meeting_type", meeting_type)
-
-            commitment_nop = 0
-            deal_id= product = deals_commitment = deals_created_product = deal_assigned_to = ""
-
-        # ---------- SUBMIT FORM ----------
+        # ---------- SUBMIT ----------
         with st.form("submit_form"):
             submit = st.form_submit_button("🚀 Submit Commitment", disabled=not form_allowed)
+
             if submit:
                 submit_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -722,25 +660,18 @@ if st.session_state.verified and st.session_state.role != "Management":
                 st.success("✅ Commitment submitted successfully")
                 st.info(f"🕒 Submitted at: **{submit_time}**")
 
-                # ---------- CLEAR FORM SESSION KEYS AFTER SUBMIT ----------
-                form_fields = ["association","product","deal_id","client_name","commitment_nop","deals_commitment",
-                               "deals_created_product","deal_assigned_to","sub_product","case_type","product_type",
-                               "meeting_type","client_mobile","followups","closure_date"]
+                # 🔥 CLEAR SESSION AFTER SUBMIT ONLY
+                form_fields = [
+                    "association","product","deal_id","client_name","commitment_nop",
+                    "deals_commitment","deals_created_product","deal_assigned_to",
+                    "sub_product","case_type","product_type","meeting_type",
+                    "client_mobile","followups","closure_date","expected_premium",
+                    "prev_product"
+                ]
+
                 for f in form_fields:
-                    key = f"{emp_code}_{f}"
-                    if key in st.session_state:
-                        del st.session_state[key]
+                    k = f"{emp_code}_{f}"
+                    if k in st.session_state:
+                        del st.session_state[k]
 
         st.markdown("</div>", unsafe_allow_html=True)
-# ================= RIGHT PANEL =================
-with right:
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("📌 Notes")
-    st.markdown("""
-    • Commitment allowed till **11:30 AM**  
-    • Achievement auto-fetched  
-    • Contact admin for correction  
-    """)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-
