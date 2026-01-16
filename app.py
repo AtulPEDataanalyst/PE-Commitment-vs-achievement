@@ -193,7 +193,7 @@ ist = ZoneInfo("Asia/Kolkata")
 now = datetime.now(ist)
 cutoff = datetime.combine(
     date.today(),
-    dt_time(12, 30).replace(tzinfo=ist)  # <- use datetime.time here
+    dt_time(11, 30).replace(tzinfo=ist)  # <- use datetime.time here
 )    
 form_allowed = now < cutoff
 
@@ -675,4 +675,5 @@ if st.session_state.verified and st.session_state.role != "Management":
                         del st.session_state[k]
 
         st.markdown("</div>", unsafe_allow_html=True)
+
 
