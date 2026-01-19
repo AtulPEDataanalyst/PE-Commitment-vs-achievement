@@ -193,7 +193,7 @@ ist = ZoneInfo("Asia/Kolkata")
 now = datetime.now(ist)
 cutoff = datetime.combine(
     date.today(),
-    dt_time(11, 30).replace(tzinfo=ist)  # <- use datetime.time here
+    dt_time(18, 30).replace(tzinfo=ist)  # <- use datetime.time here
 )    
 form_allowed = now < cutoff
 
@@ -232,41 +232,27 @@ if st.session_state.verified:
         # ================= METRIC CONFIG =================
         def get_metric_config(channel):
             if channel == "Association":
-                return {
-                    "metric": "NOP",
-                    "commit_col": "nop",
-                    "ach_col": "actual_nop",
-                    "symbol": ""
-                }
+                return {"metric": "NOP", "commit_col": "nop", "ach_col": "actual_nop", "symbol": ""}
             else:
-                return {
-                    "metric": "PREMIUM",
-                    "commit_col": "expected_premium",
-                    "ach_col": "actual_premium",
-                    "symbol": "₹"
-                }
+                return {"metric": "PREMIUM", "commit_col": "expected_premium", "ach_col": "actual_premium", "symbol": "₹"}
 
         def calc_metric(df, start, end, col):
             if df.empty or col not in df.columns or "date" not in df.columns:
                 return 0
             return pd.to_numeric(
-                df[
-                    (df["date"].dt.date >= start) &
-                    (df["date"].dt.date <= end)
-                ][col],
+                df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)][col],
                 errors="coerce"
             ).fillna(0).sum()
 
-        def calculate_today_metric(df, channel):
-            cfg = get_metric_config(channel)
-            if df.empty or "date" not in df.columns:
+        def calc_meeting(df, start, end):
+            if df.empty or "meeting_count" not in df.columns:
                 return 0
             return pd.to_numeric(
-                df[df["date"].dt.date == today].get(cfg["commit_col"], 0),
+                df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)]["meeting_count"],
                 errors="coerce"
             ).fillna(0).sum()
 
-        # ================= KPI UI =================
+        # ================= KPI CARD =================
         def kpi_card(title, value, sub):
             st.markdown(f"""
             <div class="kpi-card">
@@ -276,6 +262,7 @@ if st.session_state.verified:
             </div>
             """, unsafe_allow_html=True)
 
+        # ================= DASHBOARD =================
         def show_dashboard(commit_df, ach_df, title, channel):
             cfg = get_metric_config(channel)
             symbol = cfg["symbol"]
@@ -290,7 +277,7 @@ if st.session_state.verified:
             m_c = calc_metric(commit_df, mtd_start, today, cfg["commit_col"])
             m_a = calc_metric(ach_df, mtd_start, today, cfg["ach_col"])
 
-            t_c = calculate_today_metric(commit_df, channel)
+            t_c = calc_metric(commit_df, today, today, cfg["commit_col"])
 
             st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
             c1, c2, c3, c4 = st.columns(4)
@@ -302,114 +289,161 @@ if st.session_state.verified:
                 kpi_card(
                     "📅 Yesterday",
                     f"{symbol}{int(y_c):,}",
-                    f"Achieved: {symbol}{int(y_a):,} | {round((y_a/y_c)*100,0) if y_c else 0}%"
+                    f"Achieved: {symbol}{int(y_a):,} | {round((y_a / y_c) * 100, 0) if y_c else 0}%"
                 )
 
             with c3:
                 kpi_card(
                     "📆 Weekly",
                     f"{symbol}{int(w_c):,}",
-                    f"Achieved: {symbol}{int(w_a):,} | {round((w_a/w_c)*100,0) if w_c else 0}%"
+                    f"Achieved: {symbol}{int(w_a):,} | {round((w_a / w_c) * 100, 0) if w_c else 0}%"
                 )
 
             with c4:
                 kpi_card(
                     "📊 MTD",
                     f"{symbol}{int(m_c):,}",
-                    f"Achieved: {symbol}{int(m_a):,} | {round((m_a/m_c)*100,0) if m_c else 0}%"
+                    f"Achieved: {symbol}{int(m_a):,} | {round((m_a / m_c) * 100, 0) if m_c else 0}%"
                 )
 
-        # ================= ROLE BASED VIEW =================
+        # ================= MEETING DASHBOARD =================
+        def show_meeting_section(df):
+            st.markdown("<div class='section-title'>🤝 Meeting Count</div>", unsafe_allow_html=True)
+            c1, c2, c3, c4 = st.columns(4)
+
+            with c1:
+                kpi_card("🟢 Today", calc_meeting(df, today, today), "Meetings")
+            with c2:
+                kpi_card("📅 Yesterday", calc_meeting(df, yesterday, yesterday), "Meetings")
+            with c3:
+                kpi_card("📆 Weekly", calc_meeting(df, week_start, today), "Meetings")
+            with c4:
+                kpi_card("📊 MTD", calc_meeting(df, mtd_start, today), "Meetings")
+
+        # ================= ROLE BASED =================
         role = st.session_state.role
         emp_code = st.session_state.emp_code
 
         # ---------- USER ----------
         if role == "User":
-            c_df = commitments[commitments["empcode"].astype(str) == emp_code]
-            a_df = achievements[achievements["empcode"].astype(str) == emp_code]
-            show_dashboard(c_df, a_df, "👤 My Performance", st.session_state.channel)
+            c = commitments[commitments["empcode"].astype(str) == emp_code]
+            a = achievements[achievements["empcode"].astype(str) == emp_code]
+
+            show_dashboard(c, a, "👤 My Performance", st.session_state.channel)
+
+            if st.session_state.channel in ["Affiliate", "Corporate"]:
+                show_meeting_section(c)
 
         # ---------- TEAM LEAD ----------
         elif role == "Team Lead":
             self_c = commitments[commitments["empcode"].astype(str) == emp_code]
             self_a = achievements[achievements["empcode"].astype(str) == emp_code]
+
             show_dashboard(self_c, self_a, "👤 My Performance", st.session_state.channel)
+
+            if st.session_state.channel in ["Affiliate", "Corporate"]:
+                show_meeting_section(self_c)
 
             teams = lead_team_map[
                 lead_team_map["lead_empcode"].astype(str) == emp_code
             ]["team"].unique()
 
             for t in teams:
-                team_users = users[users["team"] == t]
-                team_codes = team_users["empcode"].astype(str)
+                tu = users[users["team"] == t]
+                codes = tu["empcode"].astype(str)
+                ch = tu["channel"].mode()[0]
 
-                team_channel = team_users["channel"].mode()[0]
+                tc = commitments[commitments["empcode"].astype(str).isin(codes)]
+                ta = achievements[achievements["empcode"].astype(str).isin(codes)]
 
-                t_c = commitments[commitments["empcode"].astype(str).isin(team_codes)]
-                t_a = achievements[achievements["empcode"].astype(str).isin(team_codes)]
+                show_dashboard(tc, ta, f"👥 Team – {t}", ch)
 
-                show_dashboard(t_c, t_a, f"👥 Team – {t}", team_channel)
+                if ch in ["Affiliate", "Corporate"]:
+                    show_meeting_section(tc)
 
-                # ✅ USER DRILL DOWN
-                user_map = dict(zip(team_users["empcode"].astype(str), team_users["empname"]))
-                sel_user = st.selectbox(
+                umap = dict(zip(tu["empcode"].astype(str), tu["empname"]))
+
+                su = st.selectbox(
                     f"Select User ({t})",
-                    list(user_map.keys()),
-                    format_func=lambda x: f"{x} - {user_map[x]}",
-                    key=f"user_{t}"
+                    list(umap.keys()),
+                    format_func=lambda x: f"{x} - {umap[x]}",
+                    key=f"{t}_u"
                 )
 
-                uc = commitments[commitments["empcode"].astype(str) == sel_user]
-                ua = achievements[achievements["empcode"].astype(str) == sel_user]
+                uc = commitments[commitments["empcode"].astype(str) == su]
+                ua = achievements[achievements["empcode"].astype(str) == su]
 
-                show_dashboard(uc, ua, f"👤 {user_map[sel_user]}", team_channel)
+                show_dashboard(uc, ua, f"👤 {umap[su]}", ch)
+
+                if ch in ["Affiliate", "Corporate"]:
+                    show_meeting_section(uc)
 
         # ---------- MANAGEMENT ----------
         else:
-            st.markdown("<div class='section-title'>🏢 Overall Performance</div>", unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>🏢 Management Dashboard</div>", unsafe_allow_html=True)
 
-            channels = users["channel"].unique().tolist()
-            selected_channel = st.selectbox("Select Channel", ["All Channels"] + channels)
+            channels = users["channel"].dropna().unique().tolist()
+            sel = st.selectbox("Select Channel", ["All Channels"] + channels)
 
-            if selected_channel == "All Channels":
+            if sel == "All Channels":
+                c_df = commitments.copy()
+                a_df = achievements.copy()
+            else:
+                c_df = commitments[commitments["channel"] == sel]
+                a_df = achievements[achievements["channel"] == sel]
+
+            if sel == "All Channels":
                 show_dashboard(
-                    commitments[commitments["channel"] == "Association"],
-                    achievements[achievements["channel"] == "Association"],
-                    "📦 NOP Based (Association)",
+                    c_df[c_df["channel"] == "Association"],
+                    a_df[a_df["channel"] == "Association"],
+                    "📦 NOP Dashboard",
                     "Association"
                 )
 
                 show_dashboard(
-                    commitments[commitments["channel"] != "Association"],
-                    achievements[achievements["channel"] != "Association"],
-                    "💰 Premium Based",
+                    c_df[c_df["channel"] != "Association"],
+                    a_df[a_df["channel"] != "Association"],
+                    "💰 Premium Dashboard",
                     "Cross Sell"
                 )
 
-            else:
-                c_df = commitments[commitments["channel"] == selected_channel]
-                a_df = achievements[achievements["channel"] == selected_channel]
+                show_meeting_section(
+                    c_df[c_df["channel"].isin(["Affiliate", "Corporate"])]
+                )
 
-                show_dashboard(c_df, a_df, f"🏢 Channel – {selected_channel}", selected_channel)
+            elif sel == "Association":
+                show_dashboard(c_df, a_df, "📦 NOP Dashboard", "Association")
 
-                # ✅ USER DRILL DOWN
-                users_in_channel = users[users["channel"] == selected_channel]
-                user_map = dict(zip(
-                    users_in_channel["empcode"].astype(str),
-                    users_in_channel["empname"]
-                ))
+            elif sel == "Cross Sell":
+                show_dashboard(c_df, a_df, "💰 Premium Dashboard", "Cross Sell")
 
-                if user_map:
-                    sel_user = st.selectbox(
-                        f"Select User ({selected_channel})",
-                        list(user_map.keys()),
-                        format_func=lambda x: f"{x} - {user_map[x]}"
+            elif sel in ["Affiliate", "Corporate"]:
+                show_dashboard(c_df, a_df, "💰 Premium Dashboard", sel)
+                show_meeting_section(c_df)
+
+            # ---------- USER DRILL ----------
+            if sel != "All Channels":
+                um = users[users["channel"] == sel]
+                umap = dict(zip(um["empcode"].astype(str), um["empname"]))
+
+                if umap:
+                    su = st.selectbox(
+                        "Select User",
+                        list(umap.keys()),
+                        format_func=lambda x: f"{x} - {umap[x]}",
+                        key="mg_user"
                     )
 
-                    uc = commitments[commitments["empcode"].astype(str) == sel_user]
-                    ua = achievements[achievements["empcode"].astype(str) == sel_user]
+                    uc = commitments[commitments["empcode"].astype(str) == su]
+                    ua = achievements[achievements["empcode"].astype(str) == su]
 
-                    show_dashboard(uc, ua, f"👤 {user_map[sel_user]}", selected_channel)
+                    if sel == "Association":
+                        show_dashboard(uc, ua, f"👤 {umap[su]} – NOP", "Association")
+                    else:
+                        show_dashboard(uc, ua, f"👤 {umap[su]} – Premium", sel)
+
+                        if sel in ["Affiliate", "Corporate"]:
+                            show_meeting_section(uc)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -665,12 +699,13 @@ if st.session_state.verified and st.session_state.role != "Management":
                 "Expected Closure Date",
                 key=f"{emp_code}_closure_date"
             )
-                 # ✅ SHOW SUCCESS MESSAGE AFTER SUBMIT (INLINE)
+
+         # ✅ SHOW SUCCESS MESSAGE AFTER SUBMIT (INLINE)
         if st.session_state.get("form_submitted"):
             st.success(
                 f"✅ Commitment submitted successfully at {st.session_state.submitted_time}"
-            ) 
-        
+            )
+
         # ================= SUBMIT =================
         with st.form("submit_form"):
             submit = st.form_submit_button("🚀 Submit Commitment", disabled=not form_allowed)
@@ -708,12 +743,13 @@ if st.session_state.verified and st.session_state.role != "Management":
                     ]
                 )
 
-               # ✅ inline message  WITH TIMESTAMP
+                    # ✅ inline message  WITH TIMESTAMP
                 st.session_state.form_submitted = True
                 st.session_state.submitted_time = datetime.now(
                     ZoneInfo("Asia/Kolkata")
                 ).strftime("%d %b %Y, %I:%M %p")
-             
+
+
 
                 # CLEAR ONLY AFTER SUBMIT
                 for k in list(st.session_state.keys()):
@@ -723,5 +759,3 @@ if st.session_state.verified and st.session_state.role != "Management":
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
-
-
