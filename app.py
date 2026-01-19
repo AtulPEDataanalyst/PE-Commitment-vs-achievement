@@ -665,7 +665,12 @@ if st.session_state.verified and st.session_state.role != "Management":
                 "Expected Closure Date",
                 key=f"{emp_code}_closure_date"
             )
-
+                 # ✅ SHOW SUCCESS MESSAGE AFTER SUBMIT (INLINE)
+        if st.session_state.get("form_submitted"):
+            st.success(
+                f"✅ Commitment submitted successfully at {st.session_state.submitted_time}"
+            ) 
+        
         # ================= SUBMIT =================
         with st.form("submit_form"):
             submit = st.form_submit_button("🚀 Submit Commitment", disabled=not form_allowed)
@@ -703,7 +708,12 @@ if st.session_state.verified and st.session_state.role != "Management":
                     ]
                 )
 
-                st.success("✅ Commitment submitted successfully")
+               # ✅ inline message  WITH TIMESTAMP
+                st.session_state.form_submitted = True
+                st.session_state.submitted_time = datetime.now(
+                    ZoneInfo("Asia/Kolkata")
+                ).strftime("%d %b %Y, %I:%M %p")
+             
 
                 # CLEAR ONLY AFTER SUBMIT
                 for k in list(st.session_state.keys()):
@@ -713,4 +723,5 @@ if st.session_state.verified and st.session_state.role != "Management":
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
+
 
