@@ -219,6 +219,79 @@ with left:
             st.success(f"Welcome {st.session_state.emp_name}")
     st.markdown("</div>", unsafe_allow_html=True)
 
+
+def show_meeting_table_mtd(df, title="📋 Meeting List (MTD)"):
+    st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+
+    # ---- Current Month Range ----
+    today = date.today()
+    mtd_start = today.replace(day=1)
+
+    # ---- Filter MTD ----
+    if df.empty or "date" not in df.columns:
+        st.warning("No meeting data available.")
+        return
+
+    mtd_df = df[(df["date"].dt.date >= mtd_start) & (df["date"].dt.date <= today)].copy()
+
+    # ---- Ensure meeting_count numeric ----
+    if "meeting_count" in mtd_df.columns:
+        mtd_df["meeting_count"] = pd.to_numeric(mtd_df["meeting_count"], errors="coerce").fillna(0)
+
+    # ---- Only take rows where meeting_count > 0 ----
+    if "meeting_count" in mtd_df.columns:
+        mtd_df = mtd_df[mtd_df["meeting_count"] > 0]
+
+    # ---- Total Meetings (MTD) ----
+    total_meetings = int(mtd_df["meeting_count"].sum()) if "meeting_count" in mtd_df.columns else len(mtd_df)
+
+    st.success(f"✅ Total Meetings in Current Month (MTD): {total_meetings}")
+
+    # ---- Build table with required columns ----
+    col_map = {
+        "empname": "empname",
+        "team": "team",
+        "client_name": "client_name",
+        "product": "product",
+        "sub_product": "sub_product",
+        "expected_premium": "expected_premium",
+        "followups": "followup_count",
+        "closure_date": "expected_closure_date",
+        "case_type": "case_type",
+        "meeting_type": "meeting_type",
+        "client_mobile": "client_mobile",
+        "timestamp": "timestamp"
+    }
+
+    # Create table safely
+    table_cols = []
+    for k, v in col_map.items():
+        if k in mtd_df.columns:
+            table_cols.append(k)
+
+    meeting_table = mtd_df[table_cols].copy()
+
+    # Rename columns exactly as required
+    meeting_table = meeting_table.rename(columns=col_map)
+
+    # Format dates
+    if "expected_closure_date" in meeting_table.columns:
+        meeting_table["expected_closure_date"] = pd.to_datetime(
+            meeting_table["expected_closure_date"], errors="coerce"
+        ).dt.strftime("%Y-%m-%d")
+
+    # Premium formatting
+    if "expected_premium" in meeting_table.columns:
+        meeting_table["expected_premium"] = pd.to_numeric(
+            meeting_table["expected_premium"], errors="coerce"
+        ).fillna(0).astype(int)
+
+    # Show table
+    st.dataframe(meeting_table, use_container_width=True)
+
+
+
+
 # ================= DASHBOARD =================
 if st.session_state.verified:
     with left:
@@ -420,6 +493,9 @@ if st.session_state.verified:
             elif sel in ["Affiliate", "Corporate"]:
                 show_dashboard(c_df, a_df, "💰 Premium Dashboard", sel)
                 show_meeting_section(c_df)
+                
+                # ✅ NEW: Meeting List Table (MTD) for Management
+                show_meeting_table_mtd(c_df, f"📋 {sel} Meeting List (MTD)")
 
             # ---------- USER DRILL ----------
             if sel != "All Channels":
