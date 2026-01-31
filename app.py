@@ -297,14 +297,56 @@ if st.session_state.verified:
     with left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
 
+        # ---------------- MONTH FILTER ----------------
+        # Ensure date columns are proper datetime
+        for df in [commitments, achievements]:
+            if "date" in df.columns:
+                df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        # Create Month options from commitments + achievements
+        all_dates = pd.concat(
+            [
+                commitments[["date"]].dropna(),
+                achievements[["date"]].dropna()
+            ],
+            ignore_index=True
+        )
+
+        if all_dates.empty:
+            st.warning("No data available for Month selection.")
+            st.stop()
+
+        all_dates["month"] = all_dates["date"].dt.to_period("M").astype(str)
+        month_options = sorted(all_dates["month"].unique().tolist(), reverse=True)
+
+        selected_month = st.selectbox(
+            "📅 Select Month (Dashboard View)",
+            month_options,
+            index=0
+        )
+
+        # Month start & end
+        month_start = pd.to_datetime(selected_month + "-01")
+        month_start_date = month_start.date()
+        month_end = (month_start + pd.offsets.MonthEnd(1)).date()
+
+        # Today logic
         today = date.today()
         yesterday = today - pd.Timedelta(days=1)
         week_start = today - pd.Timedelta(days=today.weekday())
-        mtd_start = today.replace(day=1)
 
-        # ================= METRIC CONFIG =================
+        # If selected month is current month -> show till today
+        # else show full month range (but KPI label stays MTD)
+        if month_start_date.month == today.month and month_start_date.year == today.year:
+            month_view_end = today
+            is_current_month = True
+        else:
+            month_view_end = month_end
+            is_current_month = False
+
+        # ---------------- METRIC CONFIG ----------------
         def get_metric_config(channel):
-            if channel == "Association":
+            if channel in ["Association", "Renewal"]:
                 return {"metric": "NOP", "commit_col": "nop", "ach_col": "actual_nop", "symbol": ""}
             else:
                 return {"metric": "PREMIUM", "commit_col": "expected_premium", "ach_col": "actual_premium", "symbol": "₹"}
@@ -312,20 +354,16 @@ if st.session_state.verified:
         def calc_metric(df, start, end, col):
             if df.empty or col not in df.columns or "date" not in df.columns:
                 return 0
-            return pd.to_numeric(
-                df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)][col],
-                errors="coerce"
-            ).fillna(0).sum()
+            temp = df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)].copy()
+            return pd.to_numeric(temp[col], errors="coerce").fillna(0).sum()
 
         def calc_meeting(df, start, end):
-            if df.empty or "meeting_count" not in df.columns:
+            if df.empty or "meeting_count" not in df.columns or "date" not in df.columns:
                 return 0
-            return pd.to_numeric(
-                df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)]["meeting_count"],
-                errors="coerce"
-            ).fillna(0).sum()
+            temp = df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)].copy()
+            return pd.to_numeric(temp["meeting_count"], errors="coerce").fillna(0).sum()
 
-        # ================= KPI CARD =================
+        # ---------------- KPI CARD ----------------
         def kpi_card(title, value, sub):
             st.markdown(f"""
             <div class="kpi-card">
@@ -335,43 +373,43 @@ if st.session_state.verified:
             </div>
             """, unsafe_allow_html=True)
 
-        # ================= DASHBOARD =================
+        # ---------------- MAIN KPI DASHBOARD ----------------
         def show_dashboard(commit_df, ach_df, title, channel):
             cfg = get_metric_config(channel)
             symbol = cfg["symbol"]
             metric = cfg["metric"]
 
-            y_c = calc_metric(commit_df, yesterday, yesterday, cfg["commit_col"])
-            y_a = calc_metric(ach_df, yesterday, yesterday, cfg["ach_col"])
+            # Today / Yesterday / Weekly should show ONLY if current month selected
+            if is_current_month:
+                t_c = calc_metric(commit_df, today, today, cfg["commit_col"])
+                y_c = calc_metric(commit_df, yesterday, yesterday, cfg["commit_col"])
+                y_a = calc_metric(ach_df, yesterday, yesterday, cfg["ach_col"])
+                w_c = calc_metric(commit_df, week_start, today, cfg["commit_col"])
+                w_a = calc_metric(ach_df, week_start, today, cfg["ach_col"])
+            else:
+                t_c, y_c, y_a, w_c, w_a = 0, 0, 0, 0, 0
 
-            w_c = calc_metric(commit_df, week_start, today, cfg["commit_col"])
-            w_a = calc_metric(ach_df, week_start, today, cfg["ach_col"])
-
-            m_c = calc_metric(commit_df, mtd_start, today, cfg["commit_col"])
-            m_a = calc_metric(ach_df, mtd_start, today, cfg["ach_col"])
-
-            t_c = calc_metric(commit_df, today, today, cfg["commit_col"])
+            # MTD (for current month = till today, for past month = full month)
+            m_c = calc_metric(commit_df, month_start_date, month_view_end, cfg["commit_col"])
+            m_a = calc_metric(ach_df, month_start_date, month_view_end, cfg["ach_col"])
 
             st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
             c1, c2, c3, c4 = st.columns(4)
 
             with c1:
                 kpi_card("🟢 Today", f"{symbol}{int(t_c):,}", f"Commitment ({metric})")
-
             with c2:
                 kpi_card(
                     "📅 Yesterday",
                     f"{symbol}{int(y_c):,}",
                     f"Achieved: {symbol}{int(y_a):,} | {round((y_a / y_c) * 100, 0) if y_c else 0}%"
                 )
-
             with c3:
                 kpi_card(
                     "📆 Weekly",
                     f"{symbol}{int(w_c):,}",
                     f"Achieved: {symbol}{int(w_a):,} | {round((w_a / w_c) * 100, 0) if w_c else 0}%"
                 )
-
             with c4:
                 kpi_card(
                     "📊 MTD",
@@ -379,23 +417,89 @@ if st.session_state.verified:
                     f"Achieved: {symbol}{int(m_a):,} | {round((m_a / m_c) * 100, 0) if m_c else 0}%"
                 )
 
-        # ================= MEETING DASHBOARD =================
+        # ---------------- MEETING KPI SECTION ----------------
         def show_meeting_section(df):
             st.markdown("<div class='section-title'>🤝 Meeting Count</div>", unsafe_allow_html=True)
-            c1, c2, c3, c4 = st.columns(4)
 
-            with c1:
-                kpi_card("🟢 Today", calc_meeting(df, today, today), "Meetings")
-            with c2:
-                kpi_card("📅 Yesterday", calc_meeting(df, yesterday, yesterday), "Meetings")
-            with c3:
-                kpi_card("📆 Weekly", calc_meeting(df, week_start, today), "Meetings")
-            with c4:
-                kpi_card("📊 MTD", calc_meeting(df, mtd_start, today), "Meetings")
+            if is_current_month:
+                t_m = calc_meeting(df, today, today)
+                y_m = calc_meeting(df, yesterday, yesterday)
+                w_m = calc_meeting(df, week_start, today)
+            else:
+                t_m, y_m, w_m = 0, 0, 0
+
+            m_m = calc_meeting(df, month_start_date, month_view_end)
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: kpi_card("🟢 Today", f"{int(t_m):,}", "Meetings")
+            with c2: kpi_card("📅 Yesterday", f"{int(y_m):,}", "Meetings")
+            with c3: kpi_card("📆 Weekly", f"{int(w_m):,}", "Meetings")
+            with c4: kpi_card("📊 MTD", f"{int(m_m):,}", "Meetings")
+
+        # ---------------- MEETING LIST TABLE (MTD) ----------------
+        def show_meeting_table_mtd(df, title="📋 Meeting List (MTD)"):
+            st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+            if df.empty or "date" not in df.columns:
+                st.info("No meeting data available.")
+                return
+            temp = df[(df["date"].dt.date >= month_start_date) & (df["date"].dt.date <= month_view_end)].copy()
+            if "meeting_count" in temp.columns:
+                temp["meeting_count"] = pd.to_numeric(temp["meeting_count"], errors="coerce").fillna(0)
+                temp = temp[temp["meeting_count"] > 0]
+            if temp.empty:
+                st.info("No meetings found for selected month.")
+                return
+            cols = [c for c in ["date","empname","team","client_name","case_type","product","sub_product","expected_premium","followup_count","expected_closure_date"] if c in temp.columns]
+            if not cols: cols = temp.columns.tolist()
+            st.dataframe(temp.sort_values("date", ascending=False)[cols], use_container_width=True)
+
+        # ---------------- DEAL COMMITMENT DASHBOARD ----------------
+        def show_deal_commitment_dashboard(commit_df, ach_df, title):
+            st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+            if commit_df.empty or "deals_commitment" not in commit_df.columns:
+                st.info("No Deal Commitment data available.")
+                return
+
+            def count_deals(df, start, end, col):
+                if df.empty or col not in df.columns or "date" not in df.columns:
+                    return 0
+                temp = df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)].copy()
+                vals = temp[col].astype(str).replace("nan", "").str.strip()
+                return (vals != "").sum()
+
+            today = date.today()
+            yesterday = today - pd.Timedelta(days=1)
+            week_start = today - pd.Timedelta(days=today.weekday())
+
+            t_c = count_deals(commit_df, today, today, "deals_commitment") if month_start_date.month == today.month else 0
+            y_c = count_deals(commit_df, yesterday, yesterday, "deals_commitment") if month_start_date.month == today.month else 0
+            w_c = count_deals(commit_df, week_start, today, "deals_commitment") if month_start_date.month == today.month else 0
+            m_c = count_deals(commit_df, month_start_date, month_view_end, "deals_commitment")
+
+            if not ach_df.empty and "deals_achieved" in ach_df.columns:
+                def count_achieved(df, start, end):
+                    if df.empty or "deals_achieved" not in df.columns or "date" not in df.columns:
+                        return 0
+                    temp = df[(df["date"].dt.date >= start) & (df["date"].dt.date <= end)]
+                    return pd.to_numeric(temp["deals_achieved"], errors="coerce").fillna(0).sum()
+            else:
+                def count_achieved(df, start, end):
+                    return count_deals(df, start, end, "deals_commitment")
+
+            t_a = count_achieved(ach_df, today, today) if month_start_date.month == today.month else 0
+            y_a = count_achieved(ach_df, yesterday, yesterday) if month_start_date.month == today.month else 0
+            w_a = count_achieved(ach_df, week_start, today) if month_start_date.month == today.month else 0
+            m_a = count_achieved(ach_df, month_start_date, month_view_end)
+
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: kpi_card("🟢 Today", f"{int(t_c):,}", "Deal Commitment")
+            with c2: kpi_card("📅 Yesterday", f"{int(y_c):,}", f"Achieved: {int(y_a):,} | {round((y_a / y_c) * 100, 0) if y_c else 0}%")
+            with c3: kpi_card("📆 Weekly", f"{int(w_c):,}", f"Achieved: {int(w_a):,} | {round((w_a / w_c) * 100, 0) if w_c else 0}%")
+            with c4: kpi_card("📊 MTD", f"{int(m_c):,}", f"Achieved: {int(m_a):,} | {round((m_a / m_c) * 100, 0) if m_c else 0}%")
 
         # ================= ROLE BASED =================
-        role = st.session_state.role
-        emp_code = st.session_state.emp_code
+        role = st.session_state.get("role", "")
+        emp_code = st.session_state.get("emp_code", "")
 
         # ---------- USER ----------
         if role == "User":
@@ -404,8 +508,12 @@ if st.session_state.verified:
 
             show_dashboard(c, a, "👤 My Performance", st.session_state.channel)
 
+            if st.session_state.channel == "Renewal":
+                show_deal_commitment_dashboard(c, a, "📌 Deal Commitment Performance")
+
             if st.session_state.channel in ["Affiliate", "Corporate"]:
                 show_meeting_section(c)
+                show_meeting_table_mtd(c, f"📋 {st.session_state.channel} Meeting List (MTD)")
 
         # ---------- TEAM LEAD ----------
         elif role == "Team Lead":
@@ -414,13 +522,14 @@ if st.session_state.verified:
 
             show_dashboard(self_c, self_a, "👤 My Performance", st.session_state.channel)
 
+            if st.session_state.channel == "Renewal":
+                show_deal_commitment_dashboard(self_c, self_a, "📌 Deal Commitment Performance")
+
             if st.session_state.channel in ["Affiliate", "Corporate"]:
                 show_meeting_section(self_c)
+                show_meeting_table_mtd(self_c, f"📋 {st.session_state.channel} Meeting List (MTD)")
 
-            teams = lead_team_map[
-                lead_team_map["lead_empcode"].astype(str) == emp_code
-            ]["team"].unique()
-
+            teams = lead_team_map[lead_team_map["lead_empcode"].astype(str) == emp_code]["team"].unique()
             for t in teams:
                 tu = users[users["team"] == t]
                 codes = tu["empcode"].astype(str)
@@ -431,25 +540,27 @@ if st.session_state.verified:
 
                 show_dashboard(tc, ta, f"👥 Team – {t}", ch)
 
+                if ch == "Renewal":
+                    show_deal_commitment_dashboard(tc, ta, f"📌 Team – {t} Deal Commitment")
+
                 if ch in ["Affiliate", "Corporate"]:
                     show_meeting_section(tc)
+                    show_meeting_table_mtd(tc, f"📋 {ch} Meeting List (MTD) – Team {t}")
 
                 umap = dict(zip(tu["empcode"].astype(str), tu["empname"]))
-
-                su = st.selectbox(
-                    f"Select User ({t})",
-                    list(umap.keys()),
-                    format_func=lambda x: f"{x} - {umap[x]}",
-                    key=f"{t}_u"
-                )
+                su = st.selectbox(f"Select User ({t})", list(umap.keys()), format_func=lambda x: f"{x} - {umap[x]}", key=f"{t}_u")
 
                 uc = commitments[commitments["empcode"].astype(str) == su]
                 ua = achievements[achievements["empcode"].astype(str) == su]
 
                 show_dashboard(uc, ua, f"👤 {umap[su]}", ch)
 
+                if ch == "Renewal":
+                    show_deal_commitment_dashboard(uc, ua, f"📌 {umap[su]} Deal Commitment")
+
                 if ch in ["Affiliate", "Corporate"]:
                     show_meeting_section(uc)
+                    show_meeting_table_mtd(uc, f"📋 {ch} Meeting List (MTD) – {umap[su]}")
 
         # ---------- MANAGEMENT ----------
         else:
@@ -466,63 +577,41 @@ if st.session_state.verified:
                 a_df = achievements[achievements["channel"] == sel]
 
             if sel == "All Channels":
-                show_dashboard(
-                    c_df[c_df["channel"] == "Association"],
-                    a_df[a_df["channel"] == "Association"],
-                    "📦 NOP Dashboard",
-                    "Association"
-                )
-
-                show_dashboard(
-                    c_df[c_df["channel"] != "Association"],
-                    a_df[a_df["channel"] != "Association"],
-                    "💰 Premium Dashboard",
-                    "Cross Sell"
-                )
-
-                show_meeting_section(
-                    c_df[c_df["channel"].isin(["Affiliate", "Corporate"])]
-                )
-
+                show_dashboard(c_df[c_df["channel"] == "Association"], a_df[a_df["channel"] == "Association"], "📦 NOP Dashboard", "Association")
+                show_dashboard(c_df[c_df["channel"] != "Association"], a_df[a_df["channel"] != "Association"], "💰 Premium Dashboard", "Cross Sell")
+                show_meeting_section(c_df[c_df["channel"].isin(["Affiliate", "Corporate"])])
+                show_meeting_table_mtd(c_df[c_df["channel"].isin(["Affiliate", "Corporate"])], "📋 Meeting List (MTD)")
             elif sel == "Association":
                 show_dashboard(c_df, a_df, "📦 NOP Dashboard", "Association")
-
+            elif sel == "Renewal":
+                show_dashboard(c_df, a_df, "📦 Renewal NOP Dashboard", "Renewal")
+                show_deal_commitment_dashboard(c_df, a_df, "📌 Deal Commitment Dashboard")
             elif sel == "Cross Sell":
                 show_dashboard(c_df, a_df, "💰 Premium Dashboard", "Cross Sell")
-
             elif sel in ["Affiliate", "Corporate"]:
                 show_dashboard(c_df, a_df, "💰 Premium Dashboard", sel)
                 show_meeting_section(c_df)
-                
-                # ✅ NEW: Meeting List Table (MTD) for Management
                 show_meeting_table_mtd(c_df, f"📋 {sel} Meeting List (MTD)")
 
-            # ---------- USER DRILL ----------
             if sel != "All Channels":
                 um = users[users["channel"] == sel]
                 umap = dict(zip(um["empcode"].astype(str), um["empname"]))
-
                 if umap:
-                    su = st.selectbox(
-                        "Select User",
-                        list(umap.keys()),
-                        format_func=lambda x: f"{x} - {umap[x]}",
-                        key="mg_user"
-                    )
-
+                    su = st.selectbox("Select User", list(umap.keys()), format_func=lambda x: f"{x} - {umap[x]}", key="mg_user")
                     uc = commitments[commitments["empcode"].astype(str) == su]
                     ua = achievements[achievements["empcode"].astype(str) == su]
-
                     if sel == "Association":
                         show_dashboard(uc, ua, f"👤 {umap[su]} – NOP", "Association")
+                    elif sel == "Renewal":
+                        show_dashboard(uc, ua, f"👤 {umap[su]} – Renewal NOP", "Renewal")
+                        show_deal_commitment_dashboard(uc, ua, f"📌 {umap[su]} – Deal Commitment")
                     else:
                         show_dashboard(uc, ua, f"👤 {umap[su]} – Premium", sel)
-
                         if sel in ["Affiliate", "Corporate"]:
                             show_meeting_section(uc)
+                            show_meeting_table_mtd(uc, f"📋 {sel} Meeting List (MTD) – {umap[su]}")
 
         st.markdown("</div>", unsafe_allow_html=True)
-
 
 # ================= COMMITMENT FORM =================
 if st.session_state.verified and st.session_state.role != "Management":
@@ -554,8 +643,7 @@ if st.session_state.verified and st.session_state.role != "Management":
         closure_date = date.today()
 
         # ================= ASSOCIATION =================
-        if channel == "Association":
-
+        if channel in ["Association", "Renewal"]:
             association = safe_selectbox(
                 "Association",
                 ["IMA", "IAP", "RMA", "MSBIRIA", "ISCP", "NON-IMA"],
@@ -570,11 +658,27 @@ if st.session_state.verified and st.session_state.role != "Management":
                 "PI"
             )
 
-            client_name = st.text_input("Client Name", key=f"{emp_code}_client_name")
-            deal_id = st.text_input("Deal ID", key=f"{emp_code}_deal_id")
+            # For Association -> keep required fields
+            # For Renewal -> NOT required, so we will not show them
+            if channel == "Association":
+                client_name = st.text_input("Client Name", key=f"{emp_code}_client_name")
+                deal_id = st.text_input("Deal ID", key=f"{emp_code}_deal_id")
+
+                closure_date = st.date_input(
+                    "Expected Closure Date",
+                    key=f"{emp_code}_closure_date"
+                )
+
+            else:
+                # Renewal: Not required
+                client_name = ""
+                deal_id = ""
+                closure_date = date.today()   # default (will still save in sheet)
 
             commitment_nop = st.number_input(
-                "Commitment NOP", min_value=0, step=1,
+                "Renewal Commitment" if channel == "Renewal" else "Commitment NOP",
+                min_value=0,
+                step=1,
                 key=f"{emp_code}_commitment_nop"
             )
 
@@ -603,11 +707,6 @@ if st.session_state.verified and st.session_state.role != "Management":
                 "1st"
             )
 
-            closure_date = st.date_input(
-                "Expected Closure Date",
-                key=f"{emp_code}_closure_date"
-            )
-
         # ================= CROSS SELL =================
         elif channel == "Cross Sell":
 
@@ -619,25 +718,40 @@ if st.session_state.verified and st.session_state.role != "Management":
             )
 
             if product == "Health":
-                sub_product = safe_selectbox("Sub Product", ["Port", "New"],
-                                             f"{emp_code}_sub_product", "Port")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Port", "New"],
+                    f"{emp_code}_sub_product",
+                    "Port"
+                )
             elif product == "Life":
-                sub_product = safe_selectbox("Sub Product",
-                                             ["Term", "Investment", "Traditional"],
-                                             f"{emp_code}_sub_product", "Term")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Term", "Investment", "Traditional"],
+                    f"{emp_code}_sub_product",
+                    "Term"
+                )
             elif product == "Motor":
-                sub_product = safe_selectbox("Sub Product",
-                                             ["Car", "Bike", "Commercial Vehicle"],
-                                             f"{emp_code}_sub_product", "Car")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Car", "Bike", "Commercial Vehicle"],
+                    f"{emp_code}_sub_product",
+                    "Car"
+                )
             else:
-                sub_product = safe_selectbox("Sub Product", ["New"],
-                                             f"{emp_code}_sub_product", "New")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["New"],
+                    f"{emp_code}_sub_product",
+                    "New"
+                )
 
             client_name = st.text_input("Client Name", key=f"{emp_code}_client_name")
             deal_id = st.text_input("Deal ID", key=f"{emp_code}_deal_id")
 
             expected_premium = st.number_input(
-                "Expected Premium", min_value=0,
+                "Expected Premium",
+                min_value=0,
                 key=f"{emp_code}_expected_premium"
             )
 
@@ -664,27 +778,44 @@ if st.session_state.verified and st.session_state.role != "Management":
             )
 
             if product == "Health":
-                sub_product = safe_selectbox("Sub Product", ["Port", "New"],
-                                             f"{emp_code}_sub_product", "Port")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Port", "New"],
+                    f"{emp_code}_sub_product",
+                    "Port"
+                )
             elif product == "Life":
-                sub_product = safe_selectbox("Sub Product",
-                                             ["Term", "Investment", "Traditional"],
-                                             f"{emp_code}_sub_product", "Term")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Term", "Investment", "Traditional"],
+                    f"{emp_code}_sub_product",
+                    "Term"
+                )
             elif product == "Motor":
-                sub_product = safe_selectbox("Sub Product",
-                                             ["Car", "Bike", "Commercial Vehicle"],
-                                             f"{emp_code}_sub_product", "Car")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Car", "Bike", "Commercial Vehicle"],
+                    f"{emp_code}_sub_product",
+                    "Car"
+                )
             else:
-                sub_product = safe_selectbox("Sub Product", ["New"],
-                                             f"{emp_code}_sub_product", "New")
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["New"],
+                    f"{emp_code}_sub_product",
+                    "New"
+                )
 
             meeting_count = st.number_input(
-                "Meeting Count", min_value=0, step=1,
+                "Meeting Count",
+                min_value=0,
+                step=1,
                 key=f"{emp_code}_meeting_count"
             )
 
             expected_premium = st.number_input(
-                "Expected Premium", min_value=0,
+                "Expected Premium",
+                min_value=0,
                 key=f"{emp_code}_expected_premium"
             )
 
@@ -729,24 +860,30 @@ if st.session_state.verified and st.session_state.role != "Management":
 
             if product == "EB":
                 sub_product = safe_selectbox(
-                    "Sub Product", ["GMC", "GPA", "GTL"],
-                    f"{emp_code}_sub_product", "GMC"
+                    "Sub Product",
+                    ["GMC", "GPA", "GTL"],
+                    f"{emp_code}_sub_product",
+                    "GMC"
                 )
             elif product == "NON EB":
                 sub_product = safe_selectbox(
                     "Sub Product",
                     ["DNO", "Liability", "WC", "Fire", "Marine"],
-                    f"{emp_code}_sub_product", "DNO"
+                    f"{emp_code}_sub_product",
+                    "DNO"
                 )
             else:
                 sub_product = safe_selectbox(
                     "Sub Product",
                     ["Motor", "Fire", "Health"],
-                    f"{emp_code}_sub_product", "Motor"
+                    f"{emp_code}_sub_product",
+                    "Motor"
                 )
 
             meeting_count = st.number_input(
-                "Meeting Count", min_value=0, step=1,
+                "Meeting Count",
+                min_value=0,
+                step=1,
                 key=f"{emp_code}_meeting_count"
             )
 
@@ -760,7 +897,8 @@ if st.session_state.verified and st.session_state.role != "Management":
             deal_id = ""
 
             expected_premium = st.number_input(
-                "Expected Premium", min_value=0,
+                "Expected Premium",
+                min_value=0,
                 key=f"{emp_code}_expected_premium"
             )
 
@@ -776,7 +914,7 @@ if st.session_state.verified and st.session_state.role != "Management":
                 key=f"{emp_code}_closure_date"
             )
 
-         # ✅ SHOW SUCCESS MESSAGE AFTER SUBMIT (INLINE)
+        # ✅ SHOW SUCCESS MESSAGE AFTER SUBMIT (INLINE)
         if st.session_state.get("form_submitted"):
             st.success(
                 f"✅ Commitment submitted successfully at {st.session_state.submitted_time}"
@@ -819,13 +957,11 @@ if st.session_state.verified and st.session_state.role != "Management":
                     ]
                 )
 
-                    # ✅ inline message  WITH TIMESTAMP
+                # ✅ inline message  WITH TIMESTAMP
                 st.session_state.form_submitted = True
                 st.session_state.submitted_time = datetime.now(
                     ZoneInfo("Asia/Kolkata")
                 ).strftime("%d %b %Y, %I:%M %p")
-
-
 
                 # CLEAR ONLY AFTER SUBMIT
                 for k in list(st.session_state.keys()):
@@ -835,4 +971,3 @@ if st.session_state.verified and st.session_state.role != "Management":
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
-
