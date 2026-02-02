@@ -631,7 +631,6 @@ if st.session_state.verified and st.session_state.role != "Management":
         def safe_selectbox(label, options, key, default):
             if key not in st.session_state:
                 st.session_state[key] = default
-
             return st.selectbox(label, options, key=key)
 
         # ================= DEFAULTS =================
@@ -641,9 +640,11 @@ if st.session_state.verified and st.session_state.role != "Management":
         deals_commitment = deals_created_product = deal_assigned_to = ""
         followups = ""
         closure_date = date.today()
+        product = ""
 
-        # ================= ASSOCIATION =================
+        # ================= ASSOCIATION / RENEWAL =================
         if channel in ["Association", "Renewal"]:
+
             association = safe_selectbox(
                 "Association",
                 ["IMA", "IAP", "RMA", "MSBIRIA", "ISCP", "NON-IMA"],
@@ -668,12 +669,11 @@ if st.session_state.verified and st.session_state.role != "Management":
                     "Expected Closure Date",
                     key=f"{emp_code}_closure_date"
                 )
-
             else:
                 # Renewal: Not required
                 client_name = ""
                 deal_id = ""
-                closure_date = date.today()   # default (will still save in sheet)
+                closure_date = date.today()
 
             commitment_nop = st.number_input(
                 "Renewal Commitment" if channel == "Renewal" else "Commitment NOP",
@@ -916,9 +916,7 @@ if st.session_state.verified and st.session_state.role != "Management":
 
         # ✅ SHOW SUCCESS MESSAGE AFTER SUBMIT (INLINE)
         if st.session_state.get("form_submitted"):
-            st.success(
-                f"✅ Commitment submitted successfully at {st.session_state.submitted_time}"
-            )
+            st.success(f"✅ Commitment submitted successfully at {st.session_state.submitted_time}")
 
         # ================= SUBMIT =================
         with st.form("submit_form"):
@@ -926,6 +924,78 @@ if st.session_state.verified and st.session_state.role != "Management":
 
             if submit:
                 submit_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y-%m-%d %H:%M:%S")
+
+                # ---------------- MANDATORY FIELD VALIDATION ----------------
+                errors = []
+
+                # Common mandatory for all channels
+                if not product or str(product).strip() == "":
+                    errors.append("❌ Product is mandatory")
+
+                # Channel wise mandatory
+                if channel == "Cross Sell":
+                    if not client_name.strip():
+                        errors.append("❌ Client Name is mandatory")
+                    if not deal_id.strip():
+                        errors.append("❌ Deal ID is mandatory")
+                    if expected_premium <= 0:
+                        errors.append("❌ Expected Premium must be greater than 0")
+                    if not closure_date:
+                        errors.append("❌ Expected Closure Date is mandatory")
+
+                elif channel == "Affiliate":
+                    if meeting_count <= 0:
+                        errors.append("❌ Meeting Count must be greater than 0")
+                    if expected_premium <= 0:
+                        errors.append("❌ Expected Premium must be greater than 0")
+                    if not meeting_type.strip():
+                        errors.append("❌ Meeting Type is mandatory")
+                    if not closure_date:
+                        errors.append("❌ Expected Closure Date is mandatory")
+
+                elif channel == "Corporate":
+                    if not client_name.strip():
+                        errors.append("❌ Client Name is mandatory")
+                    if not client_mobile.strip():
+                        errors.append("❌ Client Mobile is mandatory")
+                    if meeting_count <= 0:
+                        errors.append("❌ Meeting Count must be greater than 0")
+                    if expected_premium <= 0:
+                        errors.append("❌ Expected Premium must be greater than 0")
+                    if not meeting_type.strip():
+                        errors.append("❌ Meeting Type is mandatory")
+                    if not closure_date:
+                        errors.append("❌ Expected Closure Date is mandatory")
+
+                elif channel == "Association":
+                    if not association.strip():
+                        errors.append("❌ Association is mandatory")
+                    if not client_name.strip():
+                        errors.append("❌ Client Name is mandatory")
+                    if not deal_id.strip():
+                        errors.append("❌ Deal ID is mandatory")
+                    if commitment_nop <= 0:
+                        errors.append("❌ Commitment NOP must be greater than 0")
+                    if not closure_date:
+                        errors.append("❌ Expected Closure Date is mandatory")
+
+                elif channel == "Renewal":
+                    if not association.strip():
+                        errors.append("❌ Association is mandatory")
+                    if commitment_nop <= 0:
+                        errors.append("❌ Renewal Commitment must be greater than 0")
+                    if not deals_commitment.strip():
+                        errors.append("❌ Deals Commitment is mandatory")
+                    if not deals_created_product.strip():
+                        errors.append("❌ Deals Created Product is mandatory")
+                    if not deal_assigned_to.strip():
+                        errors.append("❌ Deal Assigned To is mandatory")
+
+                # If any errors -> stop submit
+                if errors:
+                    for e in errors:
+                        st.error(e)
+                    st.stop()
 
                 append_row(
                     sh,
@@ -957,11 +1027,11 @@ if st.session_state.verified and st.session_state.role != "Management":
                     ]
                 )
 
-                # ✅ inline message  WITH TIMESTAMP
+                # ✅ inline message WITH TIMESTAMP
                 st.session_state.form_submitted = True
-                st.session_state.submitted_time = datetime.now(
-                    ZoneInfo("Asia/Kolkata")
-                ).strftime("%d %b %Y, %I:%M %p")
+                st.session_state.submitted_time = datetime.now(ZoneInfo("Asia/Kolkata")).strftime(
+                    "%d %b %Y, %I:%M %p"
+                )
 
                 # CLEAR ONLY AFTER SUBMIT
                 for k in list(st.session_state.keys()):
@@ -971,3 +1041,4 @@ if st.session_state.verified and st.session_state.role != "Management":
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
+
