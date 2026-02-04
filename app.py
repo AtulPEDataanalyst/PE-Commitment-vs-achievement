@@ -346,7 +346,7 @@ if st.session_state.verified:
 
         # ---------------- METRIC CONFIG ----------------
         def get_metric_config(channel):
-            if channel in ["Association", "Renewal"]:
+            if channel in ["Association", "Renewal","Affiliate Renewal"]:
                 return {"metric": "NOP", "commit_col": "nop", "ach_col": "actual_nop", "symbol": ""}
             else:
                 return {"metric": "PREMIUM", "commit_col": "expected_premium", "ach_col": "actual_premium", "symbol": "₹"}
@@ -614,6 +614,7 @@ if st.session_state.verified:
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ================= COMMITMENT FORM =================
+# ================= COMMITMENT FORM =================
 if st.session_state.verified and st.session_state.role != "Management":
     with left:
         st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -838,6 +839,71 @@ if st.session_state.verified and st.session_state.role != "Management":
                 key=f"{emp_code}_closure_date"
             )
 
+
+        # ================= AFFILIATE =================
+        elif channel == "Affiliate Renewal":
+
+            commitment_nop = st.number_input(
+                "Renewal Commitment" if channel == "Affiliate Renewal" else "Commitment NOP",
+                min_value=0,
+                step=1,
+                key=f"{emp_code}_commitment_nop"
+            )
+
+            client_name = st.text_input("Client Name", key=f"{emp_code}_client_name")
+            product = safe_selectbox(
+                "Product",
+                ["Health", "Life", "Motor", "Fire", "Misc"],
+                f"{emp_code}_product",
+                "Health"
+            )
+
+            if product == "Health":
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Port", "New"],
+                    f"{emp_code}_sub_product",
+                    "Port"
+                )
+            elif product == "Life":
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Term", "Investment", "Traditional"],
+                    f"{emp_code}_sub_product",
+                    "Term"
+                )
+            elif product == "Motor":
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["Car", "Bike", "Commercial Vehicle"],
+                    f"{emp_code}_sub_product",
+                    "Car"
+                )
+            else:
+                sub_product = safe_selectbox(
+                    "Sub Product",
+                    ["New"],
+                    f"{emp_code}_sub_product",
+                    "New"
+                )
+
+            expected_premium = st.number_input(
+                "Expected Premium",
+                min_value=0,
+                key=f"{emp_code}_expected_premium"
+            )
+
+            followups = safe_selectbox(
+                "Follow-up Count",
+                ["1st", "2nd", "3rd", "4th", "5th", "6th", "7th or more"],
+                f"{emp_code}_followups",
+                "1st"
+            )
+
+            closure_date = st.date_input(
+                "Expected Closure Date",
+                key=f"{emp_code}_closure_date"
+            )
         # ================= CORPORATE =================
         elif channel == "Corporate":
 
@@ -1041,4 +1107,3 @@ if st.session_state.verified and st.session_state.role != "Management":
                 st.rerun()
 
         st.markdown("</div>", unsafe_allow_html=True)
-
